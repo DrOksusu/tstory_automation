@@ -1,0 +1,6 @@
+{
+  "watch": ["src"],
+  "ext": "ts",
+  "ignore": ["cookies/**/*", "dist/**/*", "node_modules/**/*", "*.json"],
+  "exec": "ts-node src/app.ts"
+}

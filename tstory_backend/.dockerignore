@@ -1,0 +1,12 @@
+node_modules
+npm-debug.log
+.env
+.env.local
+*.png
+*.log
+.git
+.gitignore
+README.md
+src
+tsconfig.json
+nodemon.json

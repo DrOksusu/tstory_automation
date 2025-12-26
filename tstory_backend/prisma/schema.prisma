@@ -1,0 +1,35 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+// 생성된 블로그 글 기록
+model BlogPost {
+  id            Int      @id @default(autoincrement())
+  sourceUrl     String   @db.Text // 참고한 블로그 링크
+  mainKeyword   String   @db.VarChar(100) // 메인 키워드
+  regionKeyword String   @db.VarChar(100) // 지역 키워드
+  title         String   @db.VarChar(255) // 생성된 제목
+  content       String   @db.LongText // 생성된 HTML 콘텐츠
+  tistoryPostId String?  @db.VarChar(100) // 티스토리 발행 후 포스트 ID
+  status        String   @default("created") @db.VarChar(50) // created, published, failed
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@index([status])
+  @@index([createdAt])
+}
+
+// 프롬프트 템플릿 관리
+model PromptTemplate {
+  id        Int      @id @default(autoincrement())
+  name      String   @db.VarChar(100)
+  content   String   @db.LongText
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}

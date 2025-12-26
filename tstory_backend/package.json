@@ -1,0 +1,36 @@
+{
+  "name": "tstory_backend",
+  "version": "1.0.0",
+  "main": "dist/app.js",
+  "scripts": {
+    "dev": "nodemon",
+    "build": "tsc",
+    "start": "node dist/app.js",
+    "prisma:generate": "prisma generate",
+    "prisma:migrate": "prisma migrate dev",
+    "prisma:push": "prisma db push"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "description": "Tistory auto-publish backend with Gemini AI",
+  "dependencies": {
+    "@google/generative-ai": "^0.24.1",
+    "@prisma/client": "^6.19.1",
+    "axios": "^1.13.2",
+    "cheerio": "^1.1.2",
+    "cors": "^2.8.5",
+    "dotenv": "^17.2.3",
+    "express": "^5.2.1",
+    "puppeteer": "^24.33.0"
+  },
+  "devDependencies": {
+    "@types/cors": "^2.8.19",
+    "@types/express": "^5.0.6",
+    "@types/node": "^25.0.3",
+    "nodemon": "^3.1.11",
+    "prisma": "^6.19.1",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.9.3"
+  }
+}
