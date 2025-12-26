@@ -1,0 +1,14 @@
+node_modules
+npm-debug.log
+.env
+.env.local
+*.png
+*.log
+.git
+.gitignore
+README.md
+tstory_frontend
+tstory_backend/node_modules
+tstory_backend/src
+tstory_backend/.env
+tstory_backend/cookies
