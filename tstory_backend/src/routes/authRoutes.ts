@@ -129,8 +129,8 @@ router.delete('/login-session/:sessionId', async (req: Request, res: Response) =
  * 저장된 쿠키(세션) 삭제
  * DELETE /auth/cookies
  */
-router.delete('/cookies', (req: Request, res: Response) => {
-  const cleared = clearCookies();
+router.delete('/cookies', async (req: Request, res: Response) => {
+  const cleared = await clearCookies();
 
   if (cleared) {
     res.json({

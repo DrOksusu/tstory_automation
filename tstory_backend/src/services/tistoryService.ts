@@ -1,16 +1,6 @@
 import puppeteer, { Browser, Page } from 'puppeteer';
-import path from 'path';
-import fs from 'fs';
 import { config } from '../config';
-
-// 쿠키 저장 경로
-const COOKIES_PATH = path.join(process.cwd(), 'cookies', 'tistory-cookies.json');
-
-// 쿠키 디렉토리 생성
-const cookiesDir = path.dirname(COOKIES_PATH);
-if (!fs.existsSync(cookiesDir)) {
-  fs.mkdirSync(cookiesDir, { recursive: true });
-}
+import prisma from './prismaClient';
 
 interface TistoryPublishResult {
   success: boolean;
@@ -127,26 +117,20 @@ async function handleContinueWritingPopup(page: Page): Promise<void> {
 }
 
 /**
- * 저장된 쿠키 로드 (파일 또는 환경변수에서)
+ * 저장된 쿠키 로드 (DB에서)
  */
 async function loadCookies(page: Page): Promise<boolean> {
   try {
-    let cookiesString: string | null = null;
+    const blogName = config.tistory.blogName;
+    console.log(`Loading cookies from database for blog: ${blogName}...`);
 
-    // 1. 환경변수에서 쿠키 로드 (Base64 인코딩된 JSON)
-    if (process.env.TISTORY_COOKIES) {
-      console.log('Loading cookies from environment variable...');
-      cookiesString = Buffer.from(process.env.TISTORY_COOKIES, 'base64').toString('utf-8');
-    }
-    // 2. 파일에서 쿠키 로드
-    else if (fs.existsSync(COOKIES_PATH)) {
-      console.log('Loading cookies from file...');
-      cookiesString = fs.readFileSync(COOKIES_PATH, 'utf-8');
-    }
+    const cookieRecord = await prisma.tistoryCookie.findUnique({
+      where: { blogName },
+    });
 
-    if (cookiesString) {
-      const cookies = JSON.parse(cookiesString);
-      console.log(`Loading ${cookies.length} cookies...`);
+    if (cookieRecord) {
+      const cookies = JSON.parse(cookieRecord.cookies);
+      console.log(`Loading ${cookies.length} cookies from DB...`);
 
       // 티스토리 관련 쿠키만 필터링
       const tistoryCookies = cookies.filter((cookie: { domain: string }) =>
@@ -155,27 +139,35 @@ async function loadCookies(page: Page): Promise<boolean> {
       console.log(`Found ${tistoryCookies.length} tistory cookies`);
 
       await page.setCookie(...tistoryCookies);
-      console.log('Cookies loaded successfully');
+      console.log('Cookies loaded successfully from DB');
       return true;
     } else {
-      console.log('No cookies found (neither env var nor file)');
+      console.log('No cookies found in database');
     }
   } catch (error) {
-    console.error('Failed to load cookies:', error);
+    console.error('Failed to load cookies from DB:', error);
   }
   return false;
 }
 
 /**
- * 쿠키 저장
+ * 쿠키 저장 (DB에)
  */
 async function saveCookies(page: Page): Promise<void> {
   try {
     const cookies = await page.cookies();
-    fs.writeFileSync(COOKIES_PATH, JSON.stringify(cookies, null, 2));
-    console.log('Cookies saved successfully');
+    const blogName = config.tistory.blogName;
+    const cookiesJson = JSON.stringify(cookies);
+
+    await prisma.tistoryCookie.upsert({
+      where: { blogName },
+      update: { cookies: cookiesJson },
+      create: { blogName, cookies: cookiesJson },
+    });
+
+    console.log(`Cookies saved to DB for blog: ${blogName}`);
   } catch (error) {
-    console.error('Failed to save cookies:', error);
+    console.error('Failed to save cookies to DB:', error);
   }
 }
 
@@ -1482,11 +1474,14 @@ async function runLoginProcess(sessionId: string): Promise<void> {
 /**
  * 저장된 쿠키 삭제
  */
-export function clearCookies(): boolean {
+export async function clearCookies(): Promise<boolean> {
   try {
-    if (fs.existsSync(COOKIES_PATH)) {
-      fs.unlinkSync(COOKIES_PATH);
-      console.log('Cookies cleared');
+    const blogName = config.tistory.blogName;
+    const result = await prisma.tistoryCookie.deleteMany({
+      where: { blogName },
+    });
+    if (result.count > 0) {
+      console.log(`Cookies cleared for blog: ${blogName}`);
       return true;
     }
     return false;
