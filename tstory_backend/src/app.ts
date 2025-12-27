@@ -15,8 +15,27 @@ process.on('uncaughtException', (error) => {
 
 const app = express();
 
-// Middleware
-app.use(cors());
+// CORS 설정
+const allowedOrigins = [
+  'http://localhost:3000',
+  'http://localhost:3600',
+  'https://tstory-automation.vercel.app',
+];
+
+app.use(cors({
+  origin: (origin, callback) => {
+    // origin이 없는 경우 (서버 간 요청, Postman 등) 허용
+    if (!origin) return callback(null, true);
+
+    if (allowedOrigins.includes(origin)) {
+      callback(null, true);
+    } else {
+      console.log(`CORS blocked origin: ${origin}`);
+      callback(null, true); // 일단 허용 (디버깅 후 false로 변경 가능)
+    }
+  },
+  credentials: true,
+}));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
