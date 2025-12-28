@@ -80,30 +80,57 @@ export default function Home() {
       const maxPollingTime = 330000;
       const pollingInterval = 2000;
       const startTime = Date.now();
+      let errorCount = 0;
 
       while (Date.now() - startTime < maxPollingTime) {
         await new Promise((resolve) => setTimeout(resolve, pollingInterval));
 
-        const statusResponse = await fetch(`/auth/login-status/${sessionId}`);
-        const statusData = await statusResponse.json();
+        try {
+          const statusResponse = await fetch(`/auth/login-status/${sessionId}`);
+          const statusData = await statusResponse.json();
 
-        // 라이브 뷰 URL 업데이트 (첫 폴링에서 받을 수도 있음)
-        const currentLiveViewUrl = statusData.liveViewUrl || liveViewUrl;
+          // 에러 카운트 리셋
+          errorCount = 0;
 
-        // 진행 상태 업데이트
-        setLoginStatus({
-          success: false,
-          message: statusData.message,
-          liveViewUrl: currentLiveViewUrl,
-        });
+          // 라이브 뷰 URL 업데이트 (첫 폴링에서 받을 수도 있음)
+          const currentLiveViewUrl = statusData.liveViewUrl || liveViewUrl;
 
-        // 완료 확인
-        if (statusData.completed) {
+          // 진행 상태 업데이트
           setLoginStatus({
-            success: statusData.success,
+            success: false,
             message: statusData.message,
+            liveViewUrl: currentLiveViewUrl,
           });
-          return;
+
+          // 완료 확인 (성공, 실패, 타임아웃, not_found 모두 포함)
+          if (statusData.completed) {
+            setLoginStatus({
+              success: statusData.success,
+              message: statusData.message,
+            });
+            return;
+          }
+
+          // 실패 상태면 즉시 중단
+          if (statusData.status === 'failed' || statusData.status === 'timeout') {
+            setLoginStatus({
+              success: false,
+              message: statusData.message,
+            });
+            return;
+          }
+        } catch (pollError) {
+          errorCount++;
+          console.error('Polling error:', pollError);
+
+          // 연속 3번 에러 시 중단
+          if (errorCount >= 3) {
+            setLoginStatus({
+              success: false,
+              message: '서버 연결 오류. 다시 시도해주세요.',
+            });
+            return;
+          }
         }
       }
 

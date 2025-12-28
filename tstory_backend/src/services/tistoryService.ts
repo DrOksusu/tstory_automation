@@ -1296,28 +1296,44 @@ function generateSessionId(): string {
 async function connectToBrowserless(): Promise<{ browser: Browser; liveViewUrl: string }> {
   const apiKey = config.browserless.apiKey;
 
+  if (!apiKey) {
+    throw new Error('BROWSERLESS_API_KEY가 설정되지 않았습니다.');
+  }
+
   // Browserless.io WebSocket 엔드포인트
   const browserWSEndpoint = `wss://chrome.browserless.io?token=${apiKey}`;
 
   console.log('Connecting to Browserless.io...');
 
-  const browser = await puppeteer.connect({
-    browserWSEndpoint,
-  });
+  try {
+    const browser = await puppeteer.connect({
+      browserWSEndpoint,
+    });
 
-  // 라이브 뷰 URL 생성 (Browserless debugger)
-  // 세션 ID 추출
-  const wsEndpoint = browser.wsEndpoint();
-  const sessionMatch = wsEndpoint.match(/devtools\/browser\/([^?]+)/);
-  const browserSessionId = sessionMatch ? sessionMatch[1] : '';
+    // 라이브 뷰 URL 생성 (Browserless debugger)
+    // 세션 ID 추출
+    const wsEndpoint = browser.wsEndpoint();
+    const sessionMatch = wsEndpoint.match(/devtools\/browser\/([^?]+)/);
+    const browserSessionId = sessionMatch ? sessionMatch[1] : '';
 
-  // Browserless.io 라이브 뷰 URL
-  const liveViewUrl = `https://chrome.browserless.io/devtools/inspector.html?token=${apiKey}&wss=chrome.browserless.io/devtools/page/${browserSessionId}`;
+    // Browserless.io 라이브 뷰 URL
+    const liveViewUrl = `https://chrome.browserless.io/devtools/inspector.html?token=${apiKey}&wss=chrome.browserless.io/devtools/page/${browserSessionId}`;
 
-  console.log('Connected to Browserless.io');
-  console.log('Live view URL:', liveViewUrl);
+    console.log('Connected to Browserless.io');
+    console.log('Live view URL:', liveViewUrl);
 
-  return { browser, liveViewUrl };
+    return { browser, liveViewUrl };
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+    console.error('Browserless.io connection failed:', errorMessage);
+
+    // Rate limit 에러 감지
+    if (errorMessage.includes('429') || errorMessage.includes('Too Many')) {
+      throw new Error('Browserless.io 요청 제한에 도달했습니다. 잠시 후 다시 시도해주세요.');
+    }
+
+    throw new Error(`Browserless.io 연결 실패: ${errorMessage}`);
+  }
 }
 
 /**
