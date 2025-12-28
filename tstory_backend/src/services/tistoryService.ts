@@ -1366,43 +1366,20 @@ export async function startManualLogin(): Promise<{ sessionId: string; liveViewU
 
   loginSessions.set(sessionId, session);
 
-  // Browserless.io 사용 여부 확인
-  const useBrowserless = config.browserless.enabled;
+  // 로컬 Puppeteer 사용 (로컬에서만 로그인 가능)
+  // 참고: 프로덕션에서는 로컬에서 미리 로그인하여 DB에 쿠키 저장 필요
+  console.log(`[${sessionId}] Using local Puppeteer for login...`);
 
-  if (useBrowserless) {
-    console.log(`[${sessionId}] Using Browserless.io for login...`);
+  runLoginProcess(sessionId).catch((error) => {
+    console.error(`Login process error for session ${sessionId}:`, error);
+    const session = loginSessions.get(sessionId);
+    if (session) {
+      session.status = 'failed';
+      session.message = error instanceof Error ? error.message : 'Unknown error';
+    }
+  });
 
-    // 백그라운드에서 Browserless 로그인 프로세스 실행
-    runBrowserlessLoginProcess(sessionId).catch((error) => {
-      console.error(`Login process error for session ${sessionId}:`, error);
-      const session = loginSessions.get(sessionId);
-      if (session) {
-        session.status = 'failed';
-        session.message = error instanceof Error ? error.message : 'Unknown error';
-      }
-    });
-
-    // 라이브 뷰 URL이 설정될 때까지 잠시 대기
-    await delay(2000);
-    const updatedSession = loginSessions.get(sessionId);
-
-    return {
-      sessionId,
-      liveViewUrl: updatedSession?.liveViewUrl
-    };
-  } else {
-    // 로컬 Puppeteer 사용 (기존 로직)
-    runLoginProcess(sessionId).catch((error) => {
-      console.error(`Login process error for session ${sessionId}:`, error);
-      const session = loginSessions.get(sessionId);
-      if (session) {
-        session.status = 'failed';
-        session.message = error instanceof Error ? error.message : 'Unknown error';
-      }
-    });
-
-    return { sessionId };
-  }
+  return { sessionId };
 }
 
 /**
