@@ -1310,16 +1310,17 @@ async function connectToBrowserless(): Promise<{ browser: Browser; liveViewUrl: 
       browserWSEndpoint,
     });
 
-    // 라이브 뷰 URL 생성 (Browserless debugger)
-    // 세션 ID 추출
-    const wsEndpoint = browser.wsEndpoint();
-    const sessionMatch = wsEndpoint.match(/devtools\/browser\/([^?]+)/);
-    const browserSessionId = sessionMatch ? sessionMatch[1] : '';
+    // 페이지 생성 및 타겟 ID 추출
+    const pages = await browser.pages();
+    const page = pages.length > 0 ? pages[0] : await browser.newPage();
+    const target = page.target();
+    const targetId = target._targetId || '';
 
-    // Browserless.io 라이브 뷰 URL
-    const liveViewUrl = `https://chrome.browserless.io/devtools/inspector.html?token=${apiKey}&wss=chrome.browserless.io/devtools/page/${browserSessionId}`;
+    // Browserless.io 라이브 뷰 URL (Chrome DevTools 형식)
+    const liveViewUrl = `https://chrome.browserless.io/?token=${apiKey}`;
 
     console.log('Connected to Browserless.io');
+    console.log('Target ID:', targetId);
     console.log('Live view URL:', liveViewUrl);
 
     return { browser, liveViewUrl };
@@ -1340,6 +1341,19 @@ async function connectToBrowserless(): Promise<{ browser: Browser; liveViewUrl: 
  * 수동 로그인 시작 (폴링 방식) - 즉시 세션 ID와 라이브 뷰 URL 반환
  */
 export async function startManualLogin(): Promise<{ sessionId: string; liveViewUrl?: string }> {
+  // 기존 세션들 모두 취소
+  console.log(`Cancelling ${loginSessions.size} existing login sessions...`);
+  for (const [existingSessionId, existingSession] of loginSessions.entries()) {
+    if (existingSession.browser) {
+      try {
+        existingSession.browser.disconnect();
+      } catch (e) {
+        console.log(`Failed to disconnect session ${existingSessionId}:`, e);
+      }
+    }
+    loginSessions.delete(existingSessionId);
+  }
+
   const sessionId = generateSessionId();
 
   const session: LoginSession = {
