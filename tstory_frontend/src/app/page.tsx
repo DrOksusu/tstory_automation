@@ -22,6 +22,7 @@ interface PublishResult {
 interface LoginStatus {
   message: string;
   success: boolean;
+  liveViewUrl?: string;
 }
 
 export default function Home() {
@@ -53,16 +54,27 @@ export default function Home() {
       }
 
       const startData = await startResponse.json();
-      const { sessionId } = startData;
+      const { sessionId, liveViewUrl } = startData;
 
       if (!sessionId) {
         throw new Error('세션 ID를 받지 못했습니다.');
       }
 
-      setLoginStatus({
-        success: false,
-        message: '브라우저에서 카카오 로그인을 완료해주세요...',
-      });
+      // 라이브 뷰 URL이 있으면 (Browserless.io 사용 중) 새 창으로 열기
+      if (liveViewUrl) {
+        setLoginStatus({
+          success: false,
+          message: '라이브 뷰 창에서 카카오 로그인을 완료해주세요.',
+          liveViewUrl,
+        });
+        // 새 창으로 라이브 뷰 열기
+        window.open(liveViewUrl, 'browserless-login', 'width=1300,height=800');
+      } else {
+        setLoginStatus({
+          success: false,
+          message: '브라우저에서 카카오 로그인을 완료해주세요...',
+        });
+      }
 
       // 2. 폴링으로 로그인 상태 확인 (최대 5분 30초)
       const maxPollingTime = 330000;
@@ -75,10 +87,14 @@ export default function Home() {
         const statusResponse = await fetch(`/auth/login-status/${sessionId}`);
         const statusData = await statusResponse.json();
 
+        // 라이브 뷰 URL 업데이트 (첫 폴링에서 받을 수도 있음)
+        const currentLiveViewUrl = statusData.liveViewUrl || liveViewUrl;
+
         // 진행 상태 업데이트
         setLoginStatus({
           success: false,
           message: statusData.message,
+          liveViewUrl: currentLiveViewUrl,
         });
 
         // 완료 확인
@@ -303,12 +319,30 @@ export default function Home() {
         </div>
 
         {loginStatus && (
-          <div className={`p-3 rounded-lg ${loginStatus.success ? 'bg-green-50 text-green-700' : 'bg-red-50 text-red-700'}`}>
-            {loginStatus.success ? '✅' : '❌'} {loginStatus.message}
+          <div className={`p-3 rounded-lg ${loginStatus.success ? 'bg-green-50 text-green-700' : loginStatus.liveViewUrl ? 'bg-blue-50 text-blue-700' : 'bg-yellow-50 text-yellow-700'}`}>
+            <div className="flex items-center gap-2">
+              {loginStatus.success ? '✅' : loginStatus.liveViewUrl ? '🌐' : '⏳'} {loginStatus.message}
+            </div>
+            {loginStatus.liveViewUrl && !loginStatus.success && (
+              <div className="mt-2 pt-2 border-t border-blue-200">
+                <p className="text-sm mb-2">팝업이 차단되었다면 아래 버튼을 클릭하세요:</p>
+                <a
+                  href={loginStatus.liveViewUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-2 px-4 py-2 bg-blue-500 hover:bg-blue-600 text-white rounded-lg text-sm font-medium transition-colors"
+                >
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                  </svg>
+                  라이브 뷰 열기
+                </a>
+              </div>
+            )}
           </div>
         )}
 
-        {loginLoading && (
+        {loginLoading && !loginStatus?.liveViewUrl && (
           <div className="p-3 bg-blue-50 text-blue-700 rounded-lg">
             브라우저 창이 열렸습니다. 카카오 계정으로 로그인을 완료해주세요.
           </div>

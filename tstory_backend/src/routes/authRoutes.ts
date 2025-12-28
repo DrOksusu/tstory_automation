@@ -71,19 +71,22 @@ router.get('/manual-login', async (req: Request, res: Response) => {
 });
 
 /**
- * 수동 로그인 시작 (폴링 방식)
+ * 수동 로그인 시작 (폴링 방식 + Browserless 라이브 뷰)
  * POST /auth/start-login
- * 브라우저가 열리고 즉시 세션 ID 반환
+ * 브라우저가 열리고 즉시 세션 ID와 라이브 뷰 URL 반환
  */
 router.post('/start-login', async (req: Request, res: Response) => {
   try {
     console.log('Starting manual login (polling mode)...');
-    const { sessionId } = await startManualLogin();
+    const { sessionId, liveViewUrl } = await startManualLogin();
 
     res.json({
       success: true,
       sessionId,
-      message: '로그인 세션이 시작되었습니다. 브라우저에서 로그인을 완료해주세요.',
+      liveViewUrl, // Browserless.io 라이브 뷰 URL (있는 경우)
+      message: liveViewUrl
+        ? '라이브 뷰 URL에서 로그인을 완료해주세요.'
+        : '로그인 세션이 시작되었습니다. 브라우저에서 로그인을 완료해주세요.',
     });
   } catch (error) {
     console.error('Start login error:', error);
@@ -107,6 +110,7 @@ router.get('/login-status/:sessionId', (req: Request, res: Response) => {
     success: status.status === 'success',
     status: status.status,
     message: status.message,
+    liveViewUrl: status.liveViewUrl, // Browserless.io 라이브 뷰 URL
     completed: ['success', 'failed', 'timeout', 'not_found'].includes(status.status),
   });
 });

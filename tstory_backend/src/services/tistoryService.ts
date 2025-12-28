@@ -385,32 +385,43 @@ export async function publishToTistory(params: {
   const { title, content, tag } = params;
 
   let browser: Browser | null = null;
+  let useBrowserless = false;
 
   try {
     console.log('Launching browser...');
 
-    // 환경변수로 headless 모드 결정 (Railway 배포 시 'true')
-    const isHeadless = process.env.HEADLESS === 'true' || process.env.NODE_ENV === 'production';
-    console.log(`Puppeteer launch starting... (headless: ${isHeadless})`);
+    // Browserless.io 사용 여부 확인 (프로덕션에서 API 키가 있으면 사용)
+    useBrowserless = config.browserless.enabled && process.env.NODE_ENV === 'production';
 
-    browser = await puppeteer.launch({
-      headless: isHeadless,
-      executablePath: process.env.PUPPETEER_EXECUTABLE_PATH || undefined,
-      args: [
-        '--no-sandbox',
-        '--disable-setuid-sandbox',
-        '--disable-dev-shm-usage',
-        '--disable-gpu',
-        '--disable-software-rasterizer',
-        '--window-size=1920,1080',
-        '--disable-blink-features=AutomationControlled',
-      ],
-      defaultViewport: isHeadless ? { width: 1920, height: 1080 } : null,
-      ignoreDefaultArgs: ['--enable-automation'],
-      timeout: 60000,
-    });
+    if (useBrowserless) {
+      console.log('Connecting to Browserless.io for publishing...');
+      const { browser: connectedBrowser } = await connectToBrowserless();
+      browser = connectedBrowser;
+      console.log('Connected to Browserless.io');
+    } else {
+      // 로컬 Puppeteer 사용
+      const isHeadless = process.env.HEADLESS === 'true' || process.env.NODE_ENV === 'production';
+      console.log(`Puppeteer launch starting... (headless: ${isHeadless})`);
 
-    console.log('Browser launched successfully');
+      browser = await puppeteer.launch({
+        headless: isHeadless,
+        executablePath: process.env.PUPPETEER_EXECUTABLE_PATH || undefined,
+        args: [
+          '--no-sandbox',
+          '--disable-setuid-sandbox',
+          '--disable-dev-shm-usage',
+          '--disable-gpu',
+          '--disable-software-rasterizer',
+          '--window-size=1920,1080',
+          '--disable-blink-features=AutomationControlled',
+        ],
+        defaultViewport: isHeadless ? { width: 1920, height: 1080 } : null,
+        ignoreDefaultArgs: ['--enable-automation'],
+        timeout: 60000,
+      });
+
+      console.log('Browser launched successfully');
+    }
 
     const page = await browser.newPage();
     await page.setViewport({ width: 1920, height: 1080 });
@@ -1106,7 +1117,11 @@ export async function publishToTistory(params: {
     };
   } finally {
     if (browser) {
-      await browser.close();
+      if (useBrowserless) {
+        browser.disconnect();
+      } else {
+        await browser.close();
+      }
     }
   }
 }
@@ -1254,7 +1269,7 @@ export async function manualLogin(): Promise<{ success: boolean; message: string
   }
 }
 
-// ==================== 폴링 기반 수동 로그인 ====================
+// ==================== 폴링 기반 수동 로그인 (Browserless.io 지원) ====================
 
 interface LoginSession {
   id: string;
@@ -1262,6 +1277,7 @@ interface LoginSession {
   message: string;
   browser: Browser | null;
   startedAt: number;
+  liveViewUrl?: string; // Browserless 라이브 뷰 URL
 }
 
 // 활성 로그인 세션 저장소
@@ -1275,9 +1291,39 @@ function generateSessionId(): string {
 }
 
 /**
- * 수동 로그인 시작 (폴링 방식) - 즉시 세션 ID 반환
+ * Browserless.io 브라우저 연결
  */
-export async function startManualLogin(): Promise<{ sessionId: string }> {
+async function connectToBrowserless(): Promise<{ browser: Browser; liveViewUrl: string }> {
+  const apiKey = config.browserless.apiKey;
+
+  // Browserless.io WebSocket 엔드포인트
+  const browserWSEndpoint = `wss://chrome.browserless.io?token=${apiKey}`;
+
+  console.log('Connecting to Browserless.io...');
+
+  const browser = await puppeteer.connect({
+    browserWSEndpoint,
+  });
+
+  // 라이브 뷰 URL 생성 (Browserless debugger)
+  // 세션 ID 추출
+  const wsEndpoint = browser.wsEndpoint();
+  const sessionMatch = wsEndpoint.match(/devtools\/browser\/([^?]+)/);
+  const browserSessionId = sessionMatch ? sessionMatch[1] : '';
+
+  // Browserless.io 라이브 뷰 URL
+  const liveViewUrl = `https://chrome.browserless.io/devtools/inspector.html?token=${apiKey}&wss=chrome.browserless.io/devtools/page/${browserSessionId}`;
+
+  console.log('Connected to Browserless.io');
+  console.log('Live view URL:', liveViewUrl);
+
+  return { browser, liveViewUrl };
+}
+
+/**
+ * 수동 로그인 시작 (폴링 방식) - 즉시 세션 ID와 라이브 뷰 URL 반환
+ */
+export async function startManualLogin(): Promise<{ sessionId: string; liveViewUrl?: string }> {
   const sessionId = generateSessionId();
 
   const session: LoginSession = {
@@ -1290,17 +1336,43 @@ export async function startManualLogin(): Promise<{ sessionId: string }> {
 
   loginSessions.set(sessionId, session);
 
-  // 백그라운드에서 로그인 프로세스 실행
-  runLoginProcess(sessionId).catch((error) => {
-    console.error(`Login process error for session ${sessionId}:`, error);
-    const session = loginSessions.get(sessionId);
-    if (session) {
-      session.status = 'failed';
-      session.message = error instanceof Error ? error.message : 'Unknown error';
-    }
-  });
+  // Browserless.io 사용 여부 확인
+  const useBrowserless = config.browserless.enabled;
 
-  return { sessionId };
+  if (useBrowserless) {
+    console.log(`[${sessionId}] Using Browserless.io for login...`);
+
+    // 백그라운드에서 Browserless 로그인 프로세스 실행
+    runBrowserlessLoginProcess(sessionId).catch((error) => {
+      console.error(`Login process error for session ${sessionId}:`, error);
+      const session = loginSessions.get(sessionId);
+      if (session) {
+        session.status = 'failed';
+        session.message = error instanceof Error ? error.message : 'Unknown error';
+      }
+    });
+
+    // 라이브 뷰 URL이 설정될 때까지 잠시 대기
+    await delay(2000);
+    const updatedSession = loginSessions.get(sessionId);
+
+    return {
+      sessionId,
+      liveViewUrl: updatedSession?.liveViewUrl
+    };
+  } else {
+    // 로컬 Puppeteer 사용 (기존 로직)
+    runLoginProcess(sessionId).catch((error) => {
+      console.error(`Login process error for session ${sessionId}:`, error);
+      const session = loginSessions.get(sessionId);
+      if (session) {
+        session.status = 'failed';
+        session.message = error instanceof Error ? error.message : 'Unknown error';
+      }
+    });
+
+    return { sessionId };
+  }
 }
 
 /**
@@ -1309,6 +1381,7 @@ export async function startManualLogin(): Promise<{ sessionId: string }> {
 export function getLoginStatus(sessionId: string): {
   status: 'pending' | 'in_progress' | 'success' | 'failed' | 'timeout' | 'not_found';
   message: string;
+  liveViewUrl?: string;
 } {
   const session = loginSessions.get(sessionId);
 
@@ -1316,7 +1389,11 @@ export function getLoginStatus(sessionId: string): {
     return { status: 'not_found', message: '세션을 찾을 수 없습니다.' };
   }
 
-  return { status: session.status, message: session.message };
+  return {
+    status: session.status,
+    message: session.message,
+    liveViewUrl: session.liveViewUrl,
+  };
 }
 
 /**
@@ -1460,6 +1537,129 @@ async function runLoginProcess(sessionId: string): Promise<void> {
         await browser.close();
       } catch (e) {
         console.error(`[${sessionId}] Error closing browser:`, e);
+      }
+    }
+    session.browser = null;
+
+    // 10분 후 세션 정리
+    setTimeout(() => {
+      loginSessions.delete(sessionId);
+    }, 600000);
+  }
+}
+
+/**
+ * Browserless.io 기반 로그인 프로세스
+ */
+async function runBrowserlessLoginProcess(sessionId: string): Promise<void> {
+  const session = loginSessions.get(sessionId);
+  if (!session) return;
+
+  let browser: Browser | null = null;
+
+  try {
+    console.log(`[${sessionId}] Connecting to Browserless.io...`);
+    session.status = 'in_progress';
+    session.message = 'Browserless.io에 연결 중...';
+
+    // Browserless.io 연결
+    const { browser: connectedBrowser, liveViewUrl } = await connectToBrowserless();
+    browser = connectedBrowser;
+    session.browser = browser;
+    session.liveViewUrl = liveViewUrl;
+
+    console.log(`[${sessionId}] Live view URL: ${liveViewUrl}`);
+
+    const pages = await browser.pages();
+    const page = pages.length > 0 ? pages[0] : await browser.newPage();
+
+    // User-Agent 설정
+    await page.setUserAgent(
+      'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+    );
+
+    await page.setViewport({ width: 1280, height: 720 });
+
+    console.log(`[${sessionId}] Opening Tistory login page...`);
+    session.message = '티스토리 로그인 페이지로 이동 중...';
+
+    await page.goto('https://www.tistory.com/auth/login', {
+      waitUntil: 'networkidle2',
+      timeout: 30000,
+    });
+
+    session.message = '라이브 뷰에서 카카오 로그인을 완료해주세요...';
+    console.log(`[${sessionId}] Waiting for user to complete login in live view...`);
+
+    // 로그인 완료 대기 (최대 5분)
+    let loginDetected = false;
+    const maxWaitTime = 300000; // 5분
+    const startTime = Date.now();
+
+    while (!loginDetected && (Date.now() - startTime) < maxWaitTime) {
+      // 세션이 취소되었는지 확인
+      if (!loginSessions.has(sessionId)) {
+        console.log(`[${sessionId}] Session cancelled`);
+        return;
+      }
+
+      await delay(3000);
+
+      try {
+        const currentUrl = page.url();
+        console.log(`[${sessionId}] Current URL: ${currentUrl}`);
+
+        const isLoggedIn = currentUrl.includes('tistory.com') &&
+          !currentUrl.includes('login') &&
+          !currentUrl.includes('auth') &&
+          !currentUrl.includes('kakao') &&
+          !currentUrl.includes('error');
+
+        if (isLoggedIn) {
+          loginDetected = true;
+          console.log(`[${sessionId}] Login detected!`);
+          break;
+        }
+      } catch (e) {
+        console.log(`[${sessionId}] Page check error:`, e);
+      }
+    }
+
+    if (loginDetected) {
+      session.message = '쿠키 저장 중...';
+      console.log(`[${sessionId}] Saving cookies...`);
+      await saveCookies(page);
+
+      // 블로그 페이지로 이동해서 추가 쿠키 획득
+      try {
+        await page.goto(`https://${config.tistory.blogName}.tistory.com`, {
+          waitUntil: 'domcontentloaded',
+          timeout: 30000
+        });
+        await delay(2000);
+        await saveCookies(page);
+      } catch (e) {
+        console.log(`[${sessionId}] Blog page navigation skipped`);
+      }
+
+      session.status = 'success';
+      session.message = '로그인 성공! 쿠키가 저장되었습니다.';
+    } else {
+      session.status = 'timeout';
+      session.message = '로그인 시간 초과 (5분). 다시 시도해주세요.';
+    }
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+    console.error(`[${sessionId}] Login error:`, errorMessage);
+    session.status = 'failed';
+    session.message = errorMessage;
+  } finally {
+    if (browser) {
+      console.log(`[${sessionId}] Disconnecting from Browserless.io...`);
+      try {
+        browser.disconnect();
+      } catch (e) {
+        console.error(`[${sessionId}] Error disconnecting browser:`, e);
       }
     }
     session.browser = null;

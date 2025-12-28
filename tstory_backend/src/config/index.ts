@@ -19,4 +19,10 @@ export const config = {
   tistory: {
     blogName: process.env.TISTORY_BLOG_NAME || '',
   },
+
+  // Browserless.io (클라우드 브라우저)
+  browserless: {
+    apiKey: process.env.BROWSERLESS_API_KEY || '',
+    enabled: !!process.env.BROWSERLESS_API_KEY,
+  },
 };
