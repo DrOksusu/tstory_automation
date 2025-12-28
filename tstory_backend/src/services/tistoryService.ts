@@ -1211,9 +1211,9 @@ export async function manualLogin(): Promise<{ success: boolean; message: string
     console.log('Waiting for login to complete...');
     console.log('(Please login manually in the browser window - use Kakao login)');
 
-    // 로그인 완료 대기 (최대 5분)
+    // 로그인 완료 대기 (최대 2분)
     let loginDetected = false;
-    const maxWaitTime = 300000; // 5분
+    const maxWaitTime = 120000; // 2분
     const startTime = Date.now();
 
     while (!loginDetected && (Date.now() - startTime) < maxWaitTime) {
@@ -1256,7 +1256,7 @@ export async function manualLogin(): Promise<{ success: boolean; message: string
 
       return { success: true, message: '로그인 성공! 쿠키가 저장되었습니다.' };
     } else {
-      return { success: false, message: '로그인 시간 초과 (5분). 다시 시도해주세요.' };
+      return { success: false, message: '로그인 시간 초과 (2분). 다시 시도해주세요.' };
     }
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : 'Unknown error';
@@ -1497,9 +1497,9 @@ async function runLoginProcess(sessionId: string): Promise<void> {
     session.message = '카카오 로그인을 완료해주세요...';
     console.log(`[${sessionId}] Waiting for login to complete...`);
 
-    // 로그인 완료 대기 (최대 5분)
+    // 로그인 완료 대기 (최대 2분)
     let loginDetected = false;
-    const maxWaitTime = 300000; // 5분
+    const maxWaitTime = 120000; // 2분
     const startTime = Date.now();
 
     while (!loginDetected && (Date.now() - startTime) < maxWaitTime) {
@@ -1553,7 +1553,7 @@ async function runLoginProcess(sessionId: string): Promise<void> {
       session.message = '로그인 성공! 쿠키가 저장되었습니다.';
     } else {
       session.status = 'timeout';
-      session.message = '로그인 시간 초과 (5분). 다시 시도해주세요.';
+      session.message = '로그인 시간 초과 (2분). 다시 시도해주세요.';
     }
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : 'Unknown error';
@@ -1621,9 +1621,9 @@ async function runBrowserlessLoginProcess(sessionId: string): Promise<void> {
     session.message = '라이브 뷰에서 카카오 로그인을 완료해주세요...';
     console.log(`[${sessionId}] Waiting for user to complete login in live view...`);
 
-    // 로그인 완료 대기 (최대 5분)
+    // 로그인 완료 대기 (최대 2분)
     let loginDetected = false;
-    const maxWaitTime = 300000; // 5분
+    const maxWaitTime = 120000; // 2분
     const startTime = Date.now();
 
     while (!loginDetected && (Date.now() - startTime) < maxWaitTime) {
@@ -1676,7 +1676,7 @@ async function runBrowserlessLoginProcess(sessionId: string): Promise<void> {
       session.message = '로그인 성공! 쿠키가 저장되었습니다.';
     } else {
       session.status = 'timeout';
-      session.message = '로그인 시간 초과 (5분). 다시 시도해주세요.';
+      session.message = '로그인 시간 초과 (2분). 다시 시도해주세요.';
     }
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : 'Unknown error';

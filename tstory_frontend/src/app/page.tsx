@@ -110,8 +110,8 @@ export default function Home() {
         });
       }
 
-      // 2. 폴링으로 로그인 상태 확인 (최대 5분 30초)
-      const maxPollingTime = 330000;
+      // 2. 폴링으로 로그인 상태 확인 (최대 2분 30초)
+      const maxPollingTime = 150000;
       const pollingInterval = 2000;
       const startTime = Date.now();
       let errorCount = 0;
