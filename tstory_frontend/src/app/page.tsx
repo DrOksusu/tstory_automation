@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import BlogForm from '@/components/BlogForm';
 import PreviewModal from '@/components/PreviewModal';
 import ResultModal from '@/components/ResultModal';
@@ -37,6 +37,37 @@ export default function Home() {
   });
   const [loginLoading, setLoginLoading] = useState(false);
   const [loginStatus, setLoginStatus] = useState<LoginStatus | null>(null);
+  const loginSessionIdRef = useRef<string | null>(null);
+
+  // 페이지 종료 시 로그인 세션 취소
+  useEffect(() => {
+    const cancelLoginSession = async () => {
+      if (loginSessionIdRef.current) {
+        try {
+          await fetch(`/auth/login-session/${loginSessionIdRef.current}`, {
+            method: 'DELETE',
+          });
+          console.log('Login session cancelled on page close');
+        } catch (e) {
+          console.error('Failed to cancel login session:', e);
+        }
+      }
+    };
+
+    const handleBeforeUnload = () => {
+      if (loginSessionIdRef.current) {
+        // sendBeacon을 사용하여 페이지 종료 시에도 요청 전송
+        navigator.sendBeacon(`/auth/login-session/${loginSessionIdRef.current}?_method=DELETE`);
+      }
+    };
+
+    window.addEventListener('beforeunload', handleBeforeUnload);
+
+    return () => {
+      window.removeEventListener('beforeunload', handleBeforeUnload);
+      cancelLoginSession();
+    };
+  }, []);
 
   const handleManualLogin = async () => {
     setLoginLoading(true);
@@ -59,6 +90,9 @@ export default function Home() {
       if (!sessionId) {
         throw new Error('세션 ID를 받지 못했습니다.');
       }
+
+      // 세션 ID 저장 (페이지 종료 시 취소용)
+      loginSessionIdRef.current = sessionId;
 
       // 라이브 뷰 URL이 있으면 (Browserless.io 사용 중) 새 창으로 열기
       if (liveViewUrl) {
@@ -104,6 +138,7 @@ export default function Home() {
 
           // 완료 확인 (성공, 실패, 타임아웃, not_found 모두 포함)
           if (statusData.completed) {
+            loginSessionIdRef.current = null; // 세션 ID 클리어
             setLoginStatus({
               success: statusData.success,
               message: statusData.message,
@@ -113,6 +148,7 @@ export default function Home() {
 
           // 실패 상태면 즉시 중단
           if (statusData.status === 'failed' || statusData.status === 'timeout') {
+            loginSessionIdRef.current = null; // 세션 ID 클리어
             setLoginStatus({
               success: false,
               message: statusData.message,

@@ -130,6 +130,25 @@ router.delete('/login-session/:sessionId', async (req: Request, res: Response) =
 });
 
 /**
+ * 로그인 세션 취소 (sendBeacon용 - POST 지원)
+ * GET /auth/login-session/:sessionId?_method=DELETE
+ */
+router.get('/login-session/:sessionId', async (req: Request, res: Response) => {
+  const { sessionId } = req.params;
+  const { _method } = req.query;
+
+  if (_method === 'DELETE') {
+    const cancelled = await cancelLogin(sessionId);
+    res.json({
+      success: cancelled,
+      message: cancelled ? '로그인 세션이 취소되었습니다.' : '세션을 찾을 수 없습니다.',
+    });
+  } else {
+    res.status(400).json({ success: false, message: 'Invalid request' });
+  }
+});
+
+/**
  * 저장된 쿠키(세션) 삭제
  * DELETE /auth/cookies
  */
