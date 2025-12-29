@@ -1,4 +1,5 @@
 import puppeteer, { Browser, Page } from 'puppeteer';
+import Browserbase from '@browserbasehq/sdk';
 import { config } from '../config';
 import prisma from './prismaClient';
 
@@ -385,19 +386,19 @@ export async function publishToTistory(params: {
   const { title, content, tag } = params;
 
   let browser: Browser | null = null;
-  let useBrowserless = false;
+  let useBrowserbase = false;
 
   try {
     console.log('Launching browser...');
 
-    // Browserless.io 사용 여부 확인 (프로덕션에서 API 키가 있으면 사용)
-    useBrowserless = config.browserless.enabled && process.env.NODE_ENV === 'production';
+    // Browserbase 사용 여부 확인 (프로덕션에서 API 키가 있으면 사용)
+    useBrowserbase = config.browserbase.enabled && process.env.NODE_ENV === 'production';
 
-    if (useBrowserless) {
-      console.log('Connecting to Browserless.io for publishing...');
-      const { browser: connectedBrowser } = await connectToBrowserless();
+    if (useBrowserbase) {
+      console.log('Connecting to Browserbase for publishing...');
+      const { browser: connectedBrowser } = await connectToBrowserbase();
       browser = connectedBrowser;
-      console.log('Connected to Browserless.io');
+      console.log('Connected to Browserbase');
     } else {
       // 로컬 Puppeteer 사용
       const isHeadless = process.env.HEADLESS === 'true' || process.env.NODE_ENV === 'production';
@@ -421,6 +422,10 @@ export async function publishToTistory(params: {
       });
 
       console.log('Browser launched successfully');
+    }
+
+    if (!browser) {
+      throw new Error('브라우저를 시작할 수 없습니다.');
     }
 
     const page = await browser.newPage();
@@ -1117,7 +1122,7 @@ export async function publishToTistory(params: {
     };
   } finally {
     if (browser) {
-      if (useBrowserless) {
+      if (useBrowserbase) {
         browser.disconnect();
       } else {
         await browser.close();
@@ -1269,7 +1274,7 @@ export async function manualLogin(): Promise<{ success: boolean; message: string
   }
 }
 
-// ==================== 폴링 기반 수동 로그인 (Browserless.io 지원) ====================
+// ==================== 폴링 기반 수동 로그인 (Browserbase 지원) ====================
 
 interface LoginSession {
   id: string;
@@ -1277,7 +1282,8 @@ interface LoginSession {
   message: string;
   browser: Browser | null;
   startedAt: number;
-  liveViewUrl?: string; // Browserless 라이브 뷰 URL
+  liveViewUrl?: string; // Browserbase 라이브 뷰 URL
+  browserbaseSessionId?: string; // Browserbase 세션 ID
 }
 
 // 활성 로그인 세션 저장소
@@ -1291,49 +1297,47 @@ function generateSessionId(): string {
 }
 
 /**
- * Browserless.io 브라우저 연결
+ * Browserbase 브라우저 연결
  */
-async function connectToBrowserless(): Promise<{ browser: Browser; liveViewUrl: string }> {
-  const apiKey = config.browserless.apiKey;
+async function connectToBrowserbase(): Promise<{ browser: Browser; liveViewUrl: string; sessionId: string }> {
+  const apiKey = config.browserbase.apiKey;
+  const projectId = config.browserbase.projectId;
 
-  if (!apiKey) {
-    throw new Error('BROWSERLESS_API_KEY가 설정되지 않았습니다.');
+  if (!apiKey || !projectId) {
+    throw new Error('BROWSERBASE_API_KEY 또는 BROWSERBASE_PROJECT_ID가 설정되지 않았습니다.');
   }
 
-  // Browserless.io WebSocket 엔드포인트
-  const browserWSEndpoint = `wss://chrome.browserless.io?token=${apiKey}`;
-
-  console.log('Connecting to Browserless.io...');
+  console.log('Connecting to Browserbase...');
 
   try {
-    const browser = await puppeteer.connect({
-      browserWSEndpoint,
+    // Browserbase SDK 초기화
+    const bb = new Browserbase({ apiKey });
+
+    // 세션 생성
+    const session = await bb.sessions.create({
+      projectId,
     });
 
-    // 페이지 생성 및 타겟 ID 추출
-    const pages = await browser.pages();
-    const page = pages.length > 0 ? pages[0] : await browser.newPage();
-    const target = page.target();
-    const targetId = target._targetId || '';
+    console.log('Browserbase session created:', session.id);
 
-    // Browserless.io 라이브 뷰 URL (Chrome DevTools 형식)
-    const liveViewUrl = `https://chrome.browserless.io/?token=${apiKey}`;
+    // 라이브 뷰 URL 생성
+    const liveViewUrl = `https://www.browserbase.com/sessions/${session.id}/debug`;
 
-    console.log('Connected to Browserless.io');
-    console.log('Target ID:', targetId);
     console.log('Live view URL:', liveViewUrl);
 
-    return { browser, liveViewUrl };
+    // Puppeteer 연결
+    const browser = await puppeteer.connect({
+      browserWSEndpoint: session.connectUrl,
+    });
+
+    console.log('Connected to Browserbase');
+
+    return { browser, liveViewUrl, sessionId: session.id };
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-    console.error('Browserless.io connection failed:', errorMessage);
+    console.error('Browserbase connection failed:', errorMessage);
 
-    // Rate limit 에러 감지
-    if (errorMessage.includes('429') || errorMessage.includes('Too Many')) {
-      throw new Error('Browserless.io 요청 제한에 도달했습니다. 잠시 후 다시 시도해주세요.');
-    }
-
-    throw new Error(`Browserless.io 연결 실패: ${errorMessage}`);
+    throw new Error(`Browserbase 연결 실패: ${errorMessage}`);
   }
 }
 
@@ -1366,20 +1370,45 @@ export async function startManualLogin(): Promise<{ sessionId: string; liveViewU
 
   loginSessions.set(sessionId, session);
 
-  // 로컬 Puppeteer 사용 (로컬에서만 로그인 가능)
-  // 참고: 프로덕션에서는 로컬에서 미리 로그인하여 DB에 쿠키 저장 필요
-  console.log(`[${sessionId}] Using local Puppeteer for login...`);
+  // Browserbase 사용 여부 확인
+  const useBrowserbase = config.browserbase.enabled;
 
-  runLoginProcess(sessionId).catch((error) => {
-    console.error(`Login process error for session ${sessionId}:`, error);
-    const session = loginSessions.get(sessionId);
-    if (session) {
-      session.status = 'failed';
-      session.message = error instanceof Error ? error.message : 'Unknown error';
-    }
-  });
+  if (useBrowserbase) {
+    console.log(`[${sessionId}] Using Browserbase for login...`);
 
-  return { sessionId };
+    // 백그라운드에서 Browserbase 로그인 프로세스 실행
+    runBrowserbaseLoginProcess(sessionId).catch((error) => {
+      console.error(`Login process error for session ${sessionId}:`, error);
+      const session = loginSessions.get(sessionId);
+      if (session) {
+        session.status = 'failed';
+        session.message = error instanceof Error ? error.message : 'Unknown error';
+      }
+    });
+
+    // 라이브 뷰 URL이 설정될 때까지 잠시 대기
+    await delay(3000);
+    const updatedSession = loginSessions.get(sessionId);
+
+    return {
+      sessionId,
+      liveViewUrl: updatedSession?.liveViewUrl,
+    };
+  } else {
+    // 로컬 Puppeteer 사용 (로컬에서만 로그인 가능)
+    console.log(`[${sessionId}] Using local Puppeteer for login...`);
+
+    runLoginProcess(sessionId).catch((error) => {
+      console.error(`Login process error for session ${sessionId}:`, error);
+      const session = loginSessions.get(sessionId);
+      if (session) {
+        session.status = 'failed';
+        session.message = error instanceof Error ? error.message : 'Unknown error';
+      }
+    });
+
+    return { sessionId };
+  }
 }
 
 /**
@@ -1556,24 +1585,25 @@ async function runLoginProcess(sessionId: string): Promise<void> {
 }
 
 /**
- * Browserless.io 기반 로그인 프로세스
+ * Browserbase 기반 로그인 프로세스
  */
-async function runBrowserlessLoginProcess(sessionId: string): Promise<void> {
+async function runBrowserbaseLoginProcess(sessionId: string): Promise<void> {
   const session = loginSessions.get(sessionId);
   if (!session) return;
 
   let browser: Browser | null = null;
 
   try {
-    console.log(`[${sessionId}] Connecting to Browserless.io...`);
+    console.log(`[${sessionId}] Connecting to Browserbase...`);
     session.status = 'in_progress';
-    session.message = 'Browserless.io에 연결 중...';
+    session.message = 'Browserbase에 연결 중...';
 
-    // Browserless.io 연결
-    const { browser: connectedBrowser, liveViewUrl } = await connectToBrowserless();
+    // Browserbase 연결
+    const { browser: connectedBrowser, liveViewUrl, sessionId: bbSessionId } = await connectToBrowserbase();
     browser = connectedBrowser;
     session.browser = browser;
     session.liveViewUrl = liveViewUrl;
+    session.browserbaseSessionId = bbSessionId;
 
     console.log(`[${sessionId}] Live view URL: ${liveViewUrl}`);
 
@@ -1662,7 +1692,7 @@ async function runBrowserlessLoginProcess(sessionId: string): Promise<void> {
     session.message = errorMessage;
   } finally {
     if (browser) {
-      console.log(`[${sessionId}] Disconnecting from Browserless.io...`);
+      console.log(`[${sessionId}] Disconnecting from Browserbase...`);
       try {
         browser.disconnect();
       } catch (e) {

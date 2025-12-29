@@ -20,9 +20,16 @@ export const config = {
     blogName: process.env.TISTORY_BLOG_NAME || '',
   },
 
-  // Browserless.io (클라우드 브라우저)
+  // Browserless.io (클라우드 브라우저) - 비활성화
   browserless: {
     apiKey: process.env.BROWSERLESS_API_KEY || '',
-    enabled: !!process.env.BROWSERLESS_API_KEY,
+    enabled: false, // Browserbase로 대체
+  },
+
+  // Browserbase (클라우드 브라우저 - 라이브 뷰 지원)
+  browserbase: {
+    apiKey: process.env.BROWSERBASE_API_KEY || '',
+    projectId: process.env.BROWSERBASE_PROJECT_ID || '',
+    enabled: !!process.env.BROWSERBASE_API_KEY && !!process.env.BROWSERBASE_PROJECT_ID,
   },
 };
