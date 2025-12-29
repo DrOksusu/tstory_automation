@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useRef } from 'react';
 
 interface PreviewData {
   title: string;
@@ -21,9 +21,55 @@ export default function PreviewModal({ data, onClose, onPublish }: PreviewModalP
     content: data.content,
   });
   const [isEditing, setIsEditing] = useState(false);
+  const [imageUrl, setImageUrl] = useState('');
+  const [imageAlt, setImageAlt] = useState('');
+  const [showImageInput, setShowImageInput] = useState(false);
+  const contentTextareaRef = useRef<HTMLTextAreaElement>(null);
 
   const handlePublishClick = () => {
     onPublish(editedData);
+  };
+
+  const handleInsertImage = () => {
+    if (!imageUrl.trim()) {
+      alert('이미지 URL을 입력해주세요.');
+      return;
+    }
+
+    const imgTag = `<figure class="imageblock alignCenter">
+  <img src="${imageUrl.trim()}" alt="${imageAlt.trim() || '이미지'}" style="max-width: 100%; height: auto;">
+  ${imageAlt.trim() ? `<figcaption>${imageAlt.trim()}</figcaption>` : ''}
+</figure>\n\n`;
+
+    const textarea = contentTextareaRef.current;
+    if (textarea) {
+      const start = textarea.selectionStart;
+      const end = textarea.selectionEnd;
+      const newContent =
+        editedData.content.substring(0, start) +
+        imgTag +
+        editedData.content.substring(end);
+
+      setEditedData({ ...editedData, content: newContent });
+
+      // 커서 위치 조정
+      setTimeout(() => {
+        textarea.focus();
+        const newPosition = start + imgTag.length;
+        textarea.setSelectionRange(newPosition, newPosition);
+      }, 0);
+    } else {
+      // textarea가 없으면 맨 끝에 추가
+      setEditedData({
+        ...editedData,
+        content: editedData.content + '\n\n' + imgTag
+      });
+    }
+
+    // 입력 필드 초기화
+    setImageUrl('');
+    setImageAlt('');
+    setShowImageInput(false);
   };
 
   return (
@@ -109,11 +155,79 @@ export default function PreviewModal({ data, onClose, onPublish }: PreviewModalP
 
             {/* 본문 내용 */}
             <div>
-              <label className="block text-xs font-medium text-slate-500 uppercase tracking-wide mb-2">
-                본문 내용 {isEditing && <span className="text-orange-500">(HTML 형식)</span>}
-              </label>
+              <div className="flex items-center justify-between mb-2">
+                <label className="block text-xs font-medium text-slate-500 uppercase tracking-wide">
+                  본문 내용 {isEditing && <span className="text-orange-500">(HTML 형식)</span>}
+                </label>
+                {isEditing && (
+                  <button
+                    onClick={() => setShowImageInput(!showImageInput)}
+                    className="flex items-center gap-1.5 px-3 py-1.5 bg-purple-100 text-purple-700 hover:bg-purple-200 rounded-lg text-sm font-medium transition-colors"
+                  >
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                    </svg>
+                    이미지 삽입
+                  </button>
+                )}
+              </div>
+
+              {/* 이미지 삽입 폼 */}
+              {isEditing && showImageInput && (
+                <div className="mb-4 p-4 bg-purple-50 border border-purple-200 rounded-lg">
+                  <div className="space-y-3">
+                    <div>
+                      <label className="block text-xs font-medium text-purple-700 mb-1">
+                        이미지 URL *
+                      </label>
+                      <input
+                        type="url"
+                        value={imageUrl}
+                        onChange={(e) => setImageUrl(e.target.value)}
+                        placeholder="https://example.com/image.jpg"
+                        className="w-full px-3 py-2 border border-purple-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-purple-500"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-medium text-purple-700 mb-1">
+                        이미지 설명 (alt 텍스트, 선택사항)
+                      </label>
+                      <input
+                        type="text"
+                        value={imageAlt}
+                        onChange={(e) => setImageAlt(e.target.value)}
+                        placeholder="이미지에 대한 설명"
+                        className="w-full px-3 py-2 border border-purple-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-purple-500"
+                      />
+                    </div>
+                    <div className="flex gap-2">
+                      <button
+                        onClick={handleInsertImage}
+                        className="px-4 py-2 bg-purple-600 text-white rounded-lg text-sm font-medium hover:bg-purple-700 transition-colors"
+                      >
+                        삽입하기
+                      </button>
+                      <button
+                        onClick={() => {
+                          setShowImageInput(false);
+                          setImageUrl('');
+                          setImageAlt('');
+                        }}
+                        className="px-4 py-2 bg-slate-200 text-slate-700 rounded-lg text-sm font-medium hover:bg-slate-300 transition-colors"
+                      >
+                        취소
+                      </button>
+                    </div>
+                    <p className="text-xs text-purple-600">
+                      * 커서 위치에 이미지가 삽입됩니다. 외부 이미지 URL을 사용하세요.
+                    </p>
+                  </div>
+                </div>
+              )}
+
               {isEditing ? (
                 <textarea
+                  ref={contentTextareaRef}
                   value={editedData.content}
                   onChange={(e) => setEditedData({ ...editedData, content: e.target.value })}
                   rows={20}
