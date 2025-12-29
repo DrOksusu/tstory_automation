@@ -71,6 +71,9 @@ const server = app.listen(PORT, '0.0.0.0', () => {
   console.log(`Server is running on port ${PORT}`);
   console.log(`Environment: ${config.nodeEnv}`);
   console.log(`Server address:`, server.address());
+  console.log(`Browserbase enabled: ${config.browserbase?.enabled}`);
+  console.log(`Browserbase API Key: ${config.browserbase?.apiKey ? 'SET' : 'NOT SET'}`);
+  console.log(`Browserbase Project ID: ${config.browserbase?.projectId ? 'SET' : 'NOT SET'}`);
 });
 
 server.on('error', (error) => {

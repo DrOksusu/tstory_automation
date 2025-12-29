@@ -1373,6 +1373,13 @@ export async function startManualLogin(): Promise<{ sessionId: string; liveViewU
   // Browserbase 사용 여부 확인
   const useBrowserbase = config.browserbase.enabled;
 
+  console.log(`[${sessionId}] Browserbase config:`, {
+    enabled: config.browserbase.enabled,
+    hasApiKey: !!config.browserbase.apiKey,
+    hasProjectId: !!config.browserbase.projectId,
+    apiKeyPrefix: config.browserbase.apiKey?.substring(0, 10) + '...',
+  });
+
   if (useBrowserbase) {
     console.log(`[${sessionId}] Using Browserbase for login...`);
 
