@@ -173,6 +173,34 @@ async function saveCookies(page: Page): Promise<void> {
 }
 
 /**
+ * 저장된 쿠키 존재 여부 확인 (DB)
+ */
+export async function checkCookiesExist(): Promise<{ exists: boolean; blogName: string; savedAt?: Date }> {
+  try {
+    const blogName = config.tistory.blogName;
+    const savedCookie = await prisma.tistoryCookie.findUnique({
+      where: { blogName },
+    });
+
+    if (savedCookie && savedCookie.cookies) {
+      const cookies = JSON.parse(savedCookie.cookies);
+      if (Array.isArray(cookies) && cookies.length > 0) {
+        return {
+          exists: true,
+          blogName,
+          savedAt: savedCookie.updatedAt,
+        };
+      }
+    }
+
+    return { exists: false, blogName };
+  } catch (error) {
+    console.error('Failed to check cookies:', error);
+    return { exists: false, blogName: config.tistory.blogName };
+  }
+}
+
+/**
  * 로그인 상태 확인
  */
 async function isLoggedIn(page: Page): Promise<boolean> {

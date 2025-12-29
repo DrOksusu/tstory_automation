@@ -25,6 +25,12 @@ interface LoginStatus {
   liveViewUrl?: string;
 }
 
+interface SavedLoginInfo {
+  loggedIn: boolean;
+  blogName: string;
+  savedAt?: string;
+}
+
 export default function Home() {
   const [loading, setLoading] = useState(false);
   const [loadingType, setLoadingType] = useState<'preview' | 'publish' | null>(null);
@@ -37,7 +43,31 @@ export default function Home() {
   });
   const [loginLoading, setLoginLoading] = useState(false);
   const [loginStatus, setLoginStatus] = useState<LoginStatus | null>(null);
+  const [savedLoginInfo, setSavedLoginInfo] = useState<SavedLoginInfo | null>(null);
+  const [checkingLogin, setCheckingLogin] = useState(true);
   const loginSessionIdRef = useRef<string | null>(null);
+
+  // 페이지 로드 시 로그인 상태 확인
+  useEffect(() => {
+    const checkLoginStatus = async () => {
+      try {
+        const response = await fetch('/auth/check-login');
+        const data = await response.json();
+        setSavedLoginInfo({
+          loggedIn: data.loggedIn,
+          blogName: data.blogName,
+          savedAt: data.savedAt,
+        });
+      } catch (error) {
+        console.error('Failed to check login status:', error);
+        setSavedLoginInfo({ loggedIn: false, blogName: '' });
+      } finally {
+        setCheckingLogin(false);
+      }
+    };
+
+    checkLoginStatus();
+  }, []);
 
   // 페이지 종료 시 로그인 세션 취소
   useEffect(() => {
@@ -143,6 +173,14 @@ export default function Home() {
               success: statusData.success,
               message: statusData.message,
             });
+            // 로그인 성공 시 savedLoginInfo 업데이트
+            if (statusData.success) {
+              setSavedLoginInfo({
+                loggedIn: true,
+                blogName: savedLoginInfo?.blogName || '',
+                savedAt: new Date().toISOString(),
+              });
+            }
             return;
           }
 
@@ -198,6 +236,12 @@ export default function Home() {
 
       const data = await response.json();
       alert(data.message);
+      // 쿠키 삭제 후 로그인 상태 초기화
+      setSavedLoginInfo({
+        loggedIn: false,
+        blogName: savedLoginInfo?.blogName || '',
+      });
+      setLoginStatus(null);
     } catch (error) {
       alert('쿠키 삭제에 실패했습니다.');
       console.error(error);
@@ -452,8 +496,41 @@ export default function Home() {
           </div>
         </div>
 
+        {/* 저장된 로그인 상태 표시 */}
+        {checkingLogin ? (
+          <div className="p-3 bg-slate-50 text-slate-500 rounded-lg flex items-center gap-2">
+            <svg className="animate-spin h-4 w-4" viewBox="0 0 24 24">
+              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
+              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+            </svg>
+            로그인 상태 확인 중...
+          </div>
+        ) : savedLoginInfo && (
+          <div className={`p-3 rounded-lg ${savedLoginInfo.loggedIn ? 'bg-green-50 text-green-700 border border-green-200' : 'bg-red-50 text-red-700 border border-red-200'}`}>
+            <div className="flex items-center gap-2">
+              {savedLoginInfo.loggedIn ? (
+                <>
+                  <span className="text-lg">✅</span>
+                  <span className="font-medium">{savedLoginInfo.blogName}.tistory.com</span>
+                  <span>로그인됨</span>
+                  {savedLoginInfo.savedAt && (
+                    <span className="text-xs text-green-600 ml-auto">
+                      ({new Date(savedLoginInfo.savedAt).toLocaleString('ko-KR')})
+                    </span>
+                  )}
+                </>
+              ) : (
+                <>
+                  <span className="text-lg">❌</span>
+                  <span>로그인 필요 - 카카오 로그인 버튼을 클릭하세요</span>
+                </>
+              )}
+            </div>
+          </div>
+        )}
+
         {loginStatus && (
-          <div className={`p-3 rounded-lg ${loginStatus.success ? 'bg-green-50 text-green-700' : loginStatus.liveViewUrl ? 'bg-blue-50 text-blue-700' : 'bg-yellow-50 text-yellow-700'}`}>
+          <div className={`mt-3 p-3 rounded-lg ${loginStatus.success ? 'bg-green-50 text-green-700' : loginStatus.liveViewUrl ? 'bg-blue-50 text-blue-700' : 'bg-yellow-50 text-yellow-700'}`}>
             <div className="flex items-center gap-2">
               {loginStatus.success ? '✅' : loginStatus.liveViewUrl ? '🌐' : '⏳'} {loginStatus.message}
             </div>

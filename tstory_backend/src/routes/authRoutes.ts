@@ -1,5 +1,5 @@
 import { Router, Request, Response } from 'express';
-import { testLogin, clearCookies, manualLogin, startManualLogin, getLoginStatus, cancelLogin } from '../services/tistoryService';
+import { testLogin, clearCookies, manualLogin, startManualLogin, getLoginStatus, cancelLogin, checkCookiesExist } from '../services/tistoryService';
 import { config } from '../config';
 
 const router = Router();
@@ -145,6 +145,32 @@ router.get('/login-session/:sessionId', async (req: Request, res: Response) => {
     });
   } else {
     res.status(400).json({ success: false, message: 'Invalid request' });
+  }
+});
+
+/**
+ * 로그인 상태 확인 (쿠키 존재 여부)
+ * GET /auth/check-login
+ */
+router.get('/check-login', async (req: Request, res: Response) => {
+  try {
+    const result = await checkCookiesExist();
+    res.json({
+      success: true,
+      loggedIn: result.exists,
+      blogName: result.blogName,
+      savedAt: result.savedAt,
+      message: result.exists
+        ? `${result.blogName} 블로그에 로그인되어 있습니다.`
+        : '로그인이 필요합니다.',
+    });
+  } catch (error) {
+    console.error('Check login error:', error);
+    res.status(500).json({
+      success: false,
+      loggedIn: false,
+      error: 'Failed to check login status',
+    });
   }
 });
 
