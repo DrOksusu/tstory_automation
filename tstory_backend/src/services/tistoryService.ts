@@ -1319,10 +1319,14 @@ async function connectToBrowserbase(): Promise<{ browser: Browser; liveViewUrl: 
     });
 
     console.log('Browserbase session created:', session.id);
+    console.log('Browserbase session object:', JSON.stringify(session, null, 2));
 
     // 라이브 뷰 URL 가져오기 (SDK 사용)
     const debugInfo = await bb.sessions.debug(session.id);
-    const liveViewUrl = debugInfo.debuggerFullscreenUrl;
+    console.log('Browserbase debugInfo:', JSON.stringify(debugInfo, null, 2));
+
+    // debuggerFullscreenUrl 또는 다른 URL 속성 확인
+    const liveViewUrl = debugInfo.debuggerFullscreenUrl || debugInfo.debuggerUrl || (debugInfo as any).pages?.[0]?.debuggerFullscreenUrl;
 
     console.log('Live view URL:', liveViewUrl);
 
