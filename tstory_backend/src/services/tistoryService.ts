@@ -1320,8 +1320,9 @@ async function connectToBrowserbase(): Promise<{ browser: Browser; liveViewUrl: 
 
     console.log('Browserbase session created:', session.id);
 
-    // 라이브 뷰 URL 생성
-    const liveViewUrl = `https://www.browserbase.com/sessions/${session.id}/debug`;
+    // 라이브 뷰 URL 가져오기 (SDK 사용)
+    const debugInfo = await bb.sessions.debug(session.id);
+    const liveViewUrl = debugInfo.debuggerFullscreenUrl;
 
     console.log('Live view URL:', liveViewUrl);
 
