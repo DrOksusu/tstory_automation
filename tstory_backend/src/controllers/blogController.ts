@@ -203,6 +203,145 @@ async function runGenerateTask(
   }
 }
 
+// ==================== 편집된 글 직접 발행 ====================
+
+interface PublishContentRequest {
+  title: string;
+  content: string;
+  metaDescription?: string;
+}
+
+/**
+ * 편집된 글 발행 시작 (폴링 방식)
+ * POST /api/blog/publish-content
+ */
+export async function startPublishContent(
+  req: Request<object, object, PublishContentRequest>,
+  res: Response
+): Promise<void> {
+  const { title, content, metaDescription } = req.body;
+
+  if (!title || !content) {
+    res.status(400).json({
+      success: false,
+      error: '제목과 본문이 필요합니다.',
+    });
+    return;
+  }
+
+  const taskId = generateTaskId();
+
+  const task: GenerateTask = {
+    id: taskId,
+    status: 'pending',
+    message: '발행 작업을 시작하는 중...',
+    startedAt: Date.now(),
+  };
+
+  generateTasks.set(taskId, task);
+
+  // 백그라운드에서 발행 작업 실행
+  runPublishContentTask(taskId, title, content).catch((error) => {
+    console.error(`Publish content task error for ${taskId}:`, error);
+    const task = generateTasks.get(taskId);
+    if (task) {
+      task.status = 'failed';
+      task.message = error instanceof Error ? error.message : 'Unknown error';
+      task.error = task.message;
+    }
+  });
+
+  res.json({
+    success: true,
+    taskId,
+    message: '발행 작업이 시작되었습니다.',
+  });
+}
+
+/**
+ * 편집된 글 백그라운드 발행 작업
+ */
+async function runPublishContentTask(
+  taskId: string,
+  title: string,
+  content: string
+): Promise<void> {
+  const task = generateTasks.get(taskId);
+  if (!task) return;
+
+  try {
+    // 1. DB에 저장
+    task.status = 'publishing';
+    task.message = '데이터베이스 저장 중...';
+    console.log(`[${taskId}] Saving edited content to database...`);
+
+    const blogPost = await prisma.blogPost.create({
+      data: {
+        sourceUrl: 'manual-edit',
+        mainKeyword: '',
+        regionKeyword: '',
+        title: title,
+        content: content,
+        status: 'created',
+      },
+    });
+
+    // 2. 티스토리에 발행
+    task.message = '티스토리에 발행 중... (브라우저 작업 진행 중)';
+    console.log(`[${taskId}] Publishing edited content to Tistory...`);
+
+    const tistoryResult = await publishToTistory({
+      title: title,
+      content: content,
+      tag: '',
+    });
+
+    if (!tistoryResult.success) {
+      await prisma.blogPost.update({
+        where: { id: blogPost.id },
+        data: { status: 'failed' },
+      });
+
+      task.status = 'failed';
+      task.message = tistoryResult.error || '티스토리 발행 실패';
+      task.error = task.message;
+      return;
+    }
+
+    // 3. DB 업데이트
+    await prisma.blogPost.update({
+      where: { id: blogPost.id },
+      data: {
+        tistoryPostId: tistoryResult.postUrl,
+        status: 'published',
+      },
+    });
+
+    task.status = 'success';
+    task.message = '발행 완료!';
+    task.result = {
+      success: true,
+      postId: blogPost.id,
+      tistoryUrl: tistoryResult.postUrl,
+      title: title,
+    };
+
+    console.log(`[${taskId}] Edited content published successfully:`, task.result);
+
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+    console.error(`[${taskId}] Error:`, errorMessage);
+    task.status = 'failed';
+    task.message = errorMessage;
+    task.error = errorMessage;
+  } finally {
+    // 30분 후 작업 정리
+    setTimeout(() => {
+      generateTasks.delete(taskId);
+    }, 1800000);
+  }
+}
+
 /**
  * 블로그 글 생성 및 발행
  * POST /api/blog/generate

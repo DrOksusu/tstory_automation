@@ -5,6 +5,7 @@ import {
   getPosts,
   startGenerate,
   getGenerateStatus,
+  startPublishContent,
 } from '../controllers/blogController';
 
 const router = Router();
@@ -20,6 +21,9 @@ router.get('/status/:taskId', getGenerateStatus);
 
 // 미리보기 (발행하지 않음)
 router.post('/preview', generatePreview);
+
+// 편집된 글 직접 발행 (폴링 방식)
+router.post('/publish-content', startPublishContent);
 
 // 생성된 글 목록 조회
 router.get('/posts', getPosts);

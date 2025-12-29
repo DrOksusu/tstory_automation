@@ -329,9 +329,80 @@ export default function Home() {
     }
   };
 
-  const handlePublishFromPreview = async () => {
+  const handlePublishFromPreview = async (editedData: PreviewData) => {
     setPreviewData(null);
-    await handlePublish();
+    setLoading(true);
+    setLoadingType('publish');
+
+    try {
+      // 편집된 글을 직접 발행
+      const startResponse = await fetch('/api/blog/publish-content', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          title: editedData.title,
+          content: editedData.content,
+          metaDescription: editedData.metaDescription,
+        }),
+      });
+
+      if (!startResponse.ok) {
+        const errorData = await startResponse.json();
+        throw new Error(errorData.error || '발행 시작에 실패했습니다.');
+      }
+
+      const startData = await startResponse.json();
+      const { taskId } = startData;
+
+      if (!taskId) {
+        throw new Error('작업 ID를 받지 못했습니다.');
+      }
+
+      // 폴링으로 작업 상태 확인 (최대 5분)
+      const maxPollingTime = 300000;
+      const pollingInterval = 3000;
+      const startTime = Date.now();
+
+      while (Date.now() - startTime < maxPollingTime) {
+        await new Promise((resolve) => setTimeout(resolve, pollingInterval));
+
+        const statusResponse = await fetch(`/api/blog/status/${taskId}`);
+        const statusData = await statusResponse.json();
+
+        console.log('Publish status:', statusData.status, statusData.message);
+
+        if (statusData.completed) {
+          if (statusData.success && statusData.result) {
+            setPublishResult(statusData.result);
+          } else {
+            setPublishResult({
+              success: false,
+              error: statusData.error || statusData.message,
+            });
+          }
+          return;
+        }
+      }
+
+      // 타임아웃
+      setPublishResult({
+        success: false,
+        error: '작업 시간 초과 (5분). 백엔드 로그를 확인해주세요.',
+      });
+    } catch (error) {
+      let message = '서버 연결에 실패했습니다.';
+      if (error instanceof Error) {
+        message = error.message;
+      }
+      setPublishResult({
+        success: false,
+        error: message,
+      });
+      console.error(error);
+    } finally {
+      setLoading(false);
+      setLoadingType(null);
+    }
   };
 
   return (
