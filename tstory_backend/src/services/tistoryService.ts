@@ -1441,6 +1441,18 @@ export async function startManualLogin(): Promise<{ sessionId: string; liveViewU
     loginSessions.delete(existingSessionId);
   }
 
+  // 기존 쿠키 삭제 (새 로그인을 위해 깨끗하게 시작)
+  const blogName = config.tistory.blogName;
+  console.log(`Deleting existing cookies for blog: ${blogName}...`);
+  try {
+    await prisma.tistoryCookie.deleteMany({
+      where: { blogName }
+    });
+    console.log('Existing cookies deleted');
+  } catch (e) {
+    console.log('No existing cookies to delete or error:', e);
+  }
+
   const sessionId = generateSessionId();
 
   const session: LoginSession = {
