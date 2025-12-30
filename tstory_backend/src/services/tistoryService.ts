@@ -201,29 +201,47 @@ export async function checkCookiesExist(): Promise<{ exists: boolean; blogName: 
 }
 
 /**
- * 로그인 상태 확인
+ * 로그인 상태 확인 (더 정확한 체크)
  */
 async function isLoggedIn(page: Page): Promise<boolean> {
   try {
-    await page.goto(`https://${config.tistory.blogName}.tistory.com/manage`, {
+    // 글쓰기 페이지로 직접 이동 시도 (더 정확한 체크)
+    const writeUrl = `https://${config.tistory.blogName}.tistory.com/manage/newpost`;
+    console.log(`isLoggedIn check - navigating to: ${writeUrl}`);
+
+    await page.goto(writeUrl, {
       waitUntil: 'networkidle2',
-      timeout: 15000,
+      timeout: 20000,
     });
 
     const url = page.url();
     console.log(`isLoggedIn check - Current URL: ${url}`);
 
-    // 로그인 페이지로 리디렉션되지 않았으면 로그인된 상태
-    // /manage 페이지가 아니더라도 블로그 홈으로 가면 로그인된 것
+    // 로그인 페이지로 리디렉션되면 로그인 안됨
     const isLoginPage = url.includes('login') || url.includes('auth') || url.includes('kakao');
-
     if (isLoginPage) {
       console.log('Not logged in - redirected to login page');
       return false;
     }
 
-    console.log('Logged in successfully');
-    return true;
+    // 글쓰기 페이지나 관리 페이지에 있으면 로그인됨
+    const isWritePage = url.includes('newpost') || url.includes('manage/post') || url.includes('/write');
+    const isManagePage = url.includes('/manage');
+
+    if (isWritePage || isManagePage) {
+      console.log('Logged in successfully - on manage/write page');
+      return true;
+    }
+
+    // 블로그 홈으로 리다이렉트되면 쿠키는 있지만 세션이 만료됨
+    if (url === `https://${config.tistory.blogName}.tistory.com/` ||
+        url === `https://${config.tistory.blogName}.tistory.com`) {
+      console.log('Cookie exists but session expired - redirected to blog home');
+      return false;
+    }
+
+    console.log('Login status unclear, assuming not logged in');
+    return false;
   } catch (error) {
     console.error('isLoggedIn check failed:', error);
     return false;
@@ -465,16 +483,31 @@ export async function publishToTistory(params: {
     );
 
     // 쿠키 로드 시도
-    await loadCookies(page);
+    const cookiesLoaded = await loadCookies(page);
+    console.log(`Cookies loaded: ${cookiesLoaded}`);
 
     // 로그인 상태 확인
     const loggedIn = await isLoggedIn(page);
 
     if (!loggedIn) {
-      console.log('Not logged in, attempting login...');
+      console.log('Not logged in or session expired');
+
+      // Browserbase 환경에서는 자동 로그인 불가 (2FA 필요)
+      if (config.browserbase.enabled) {
+        // 저장된 쿠키 삭제 (만료된 쿠키)
+        await prisma.tistoryCookie.deleteMany({
+          where: { blogName: config.tistory.blogName }
+        });
+        console.log('Expired cookies deleted from DB');
+
+        throw new Error('로그인이 만료되었습니다. 프론트엔드에서 "카카오 로그인" 버튼을 클릭하여 다시 로그인해주세요.');
+      }
+
+      // 로컬 환경에서는 자동 로그인 시도
+      console.log('Attempting auto-login...');
       const loginSuccess = await loginToTistory(page);
       if (!loginSuccess) {
-        throw new Error('Failed to login to Tistory');
+        throw new Error('자동 로그인에 실패했습니다. 수동으로 로그인해주세요.');
       }
     }
 
@@ -507,34 +540,51 @@ export async function publishToTistory(params: {
     let currentUrl = page.url();
     console.log('Current URL after navigation:', currentUrl);
 
-    // 글쓰기 페이지가 아니면 사용자에게 직접 이동 요청
+    // 글쓰기 페이지가 아니면 처리
     if (!currentUrl.includes('newpost') && !currentUrl.includes('manage')) {
       console.log('========================================');
       console.log('글쓰기 페이지에 접근할 수 없습니다.');
-      console.log('브라우저에서 직접 글쓰기 페이지로 이동해주세요:');
-      console.log('1. 티스토리 관리자 페이지 접속');
-      console.log('2. 글쓰기 버튼 클릭');
+      console.log(`Current URL: ${currentUrl}`);
       console.log('========================================');
 
-      // 사용자가 직접 글쓰기 페이지로 이동할 때까지 대기 (최대 3분)
-      const waitStart = Date.now();
-      const waitMax = 180000;
+      // 로그인 페이지로 리다이렉트되었거나 블로그 홈으로 갔으면 세션 만료
+      const isLoginPage = currentUrl.includes('login') || currentUrl.includes('auth') || currentUrl.includes('kakao');
+      const isBlogHome = currentUrl === `https://${config.tistory.blogName}.tistory.com/` ||
+                         currentUrl === `https://${config.tistory.blogName}.tistory.com`;
 
-      while ((Date.now() - waitStart) < waitMax) {
-        await delay(2000);
-        currentUrl = page.url();
-        console.log(`Waiting for write page... Current: ${currentUrl}`);
+      if (isLoginPage || isBlogHome) {
+        // Browserbase 환경에서는 만료된 쿠키 삭제 후 에러 반환
+        if (config.browserbase.enabled) {
+          await prisma.tistoryCookie.deleteMany({
+            where: { blogName: config.tistory.blogName }
+          });
+          console.log('Expired cookies deleted from DB');
+          throw new Error('로그인이 만료되었습니다. 프론트엔드에서 "카카오 로그인" 버튼을 클릭하여 다시 로그인해주세요.');
+        }
+      }
 
-        if (currentUrl.includes('newpost') || currentUrl.includes('manage/post') || currentUrl.includes('/write')) {
-          console.log('글쓰기 페이지 도달!');
+      // 로컬 환경에서만 대기 (Browserbase에서는 즉시 에러)
+      if (!config.browserbase.enabled) {
+        console.log('로컬 환경: 사용자가 직접 글쓰기 페이지로 이동할 때까지 대기...');
+        const waitStart = Date.now();
+        const waitMax = 180000;
+
+        while ((Date.now() - waitStart) < waitMax) {
           await delay(2000);
-          break;
+          currentUrl = page.url();
+          console.log(`Waiting for write page... Current: ${currentUrl}`);
+
+          if (currentUrl.includes('newpost') || currentUrl.includes('manage/post') || currentUrl.includes('/write')) {
+            console.log('글쓰기 페이지 도달!');
+            await delay(2000);
+            break;
+          }
         }
       }
 
       // 여전히 글쓰기 페이지가 아니면 에러
       if (!currentUrl.includes('newpost') && !currentUrl.includes('manage/post') && !currentUrl.includes('/write')) {
-        throw new Error('글쓰기 페이지로 이동하지 못했습니다. 브라우저에서 직접 글쓰기 페이지로 이동해주세요.');
+        throw new Error('글쓰기 페이지로 이동하지 못했습니다. 로그인 상태를 확인해주세요.');
       }
     }
 
