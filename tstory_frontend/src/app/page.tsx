@@ -31,11 +31,19 @@ interface SavedLoginInfo {
   savedAt?: string;
 }
 
+interface PublishProgress {
+  status: string;
+  message: string;
+  step: number;
+  totalSteps: number;
+}
+
 export default function Home() {
   const [loading, setLoading] = useState(false);
   const [loadingType, setLoadingType] = useState<'preview' | 'publish' | null>(null);
   const [previewData, setPreviewData] = useState<PreviewData | null>(null);
   const [publishResult, setPublishResult] = useState<PublishResult | null>(null);
+  const [publishProgress, setPublishProgress] = useState<PublishProgress | null>(null);
   const [formData, setFormData] = useState({
     sourceUrl: '',
     mainKeyword: '',
@@ -296,6 +304,18 @@ export default function Home() {
     }
   };
 
+  // 상태를 단계로 변환하는 헬퍼 함수
+  const getStepFromStatus = (status: string): { step: number; totalSteps: number } => {
+    const steps: Record<string, number> = {
+      'pending': 1,
+      'generating': 2,
+      'publishing': 3,
+      'success': 4,
+      'failed': 4,
+    };
+    return { step: steps[status] || 1, totalSteps: 4 };
+  };
+
   const handlePublish = async () => {
     if (!formData.sourceUrl || !formData.mainKeyword || !formData.regionKeyword) {
       alert('모든 필드를 입력해주세요.');
@@ -304,6 +324,7 @@ export default function Home() {
 
     setLoading(true);
     setLoadingType('publish');
+    setPublishProgress({ status: 'pending', message: '발행 준비 중...', step: 1, totalSteps: 4 });
 
     try {
       // 1. 발행 작업 시작
@@ -338,8 +359,18 @@ export default function Home() {
 
         console.log('Task status:', statusData.status, statusData.message);
 
+        // 진행 상태 업데이트
+        const { step, totalSteps } = getStepFromStatus(statusData.status);
+        setPublishProgress({
+          status: statusData.status,
+          message: statusData.message,
+          step,
+          totalSteps,
+        });
+
         // 완료 확인
         if (statusData.completed) {
+          setPublishProgress(null);
           if (statusData.success && statusData.result) {
             setPublishResult(statusData.result);
           } else {
@@ -353,6 +384,7 @@ export default function Home() {
       }
 
       // 타임아웃
+      setPublishProgress(null);
       setPublishResult({
         success: false,
         error: '작업 시간 초과 (10분). 백엔드 로그를 확인해주세요.',
@@ -362,6 +394,7 @@ export default function Home() {
       if (error instanceof Error) {
         message = error.message;
       }
+      setPublishProgress(null);
       setPublishResult({
         success: false,
         error: message,
@@ -377,6 +410,7 @@ export default function Home() {
     setPreviewData(null);
     setLoading(true);
     setLoadingType('publish');
+    setPublishProgress({ status: 'pending', message: '발행 준비 중...', step: 1, totalSteps: 3 });
 
     try {
       // 편집된 글을 직접 발행
@@ -415,7 +449,17 @@ export default function Home() {
 
         console.log('Publish status:', statusData.status, statusData.message);
 
+        // 진행 상태 업데이트 (미리보기에서 발행은 3단계: 준비 → 발행 → 완료)
+        const previewSteps: Record<string, number> = { 'pending': 1, 'publishing': 2, 'success': 3, 'failed': 3 };
+        setPublishProgress({
+          status: statusData.status,
+          message: statusData.message,
+          step: previewSteps[statusData.status] || 1,
+          totalSteps: 3,
+        });
+
         if (statusData.completed) {
+          setPublishProgress(null);
           if (statusData.success && statusData.result) {
             setPublishResult(statusData.result);
           } else {
@@ -429,6 +473,7 @@ export default function Home() {
       }
 
       // 타임아웃
+      setPublishProgress(null);
       setPublishResult({
         success: false,
         error: '작업 시간 초과 (5분). 백엔드 로그를 확인해주세요.',
@@ -438,6 +483,7 @@ export default function Home() {
       if (error instanceof Error) {
         message = error.message;
       }
+      setPublishProgress(null);
       setPublishResult({
         success: false,
         error: message,
@@ -611,6 +657,120 @@ export default function Home() {
           onClose={() => setPreviewData(null)}
           onPublish={handlePublishFromPreview}
         />
+      )}
+
+      {/* 발행 진행 상태 모달 */}
+      {publishProgress && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center">
+          <div className="fixed inset-0 bg-black/50 backdrop-blur-sm" />
+          <div className="relative bg-white rounded-2xl shadow-2xl p-8 max-w-md w-full mx-4">
+            <h3 className="text-xl font-bold text-slate-800 text-center mb-6">
+              발행 진행 중
+            </h3>
+
+            {/* 진행 단계 표시 */}
+            <div className="mb-6">
+              <div className="flex justify-between mb-2">
+                {Array.from({ length: publishProgress.totalSteps }, (_, i) => (
+                  <div
+                    key={i}
+                    className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold transition-all ${
+                      i + 1 < publishProgress.step
+                        ? 'bg-green-500 text-white'
+                        : i + 1 === publishProgress.step
+                        ? 'bg-orange-500 text-white animate-pulse'
+                        : 'bg-slate-200 text-slate-400'
+                    }`}
+                  >
+                    {i + 1 < publishProgress.step ? '✓' : i + 1}
+                  </div>
+                ))}
+              </div>
+              <div className="relative h-2 bg-slate-200 rounded-full overflow-hidden">
+                <div
+                  className="absolute left-0 top-0 h-full bg-gradient-to-r from-orange-500 to-red-500 transition-all duration-500"
+                  style={{ width: `${((publishProgress.step - 1) / (publishProgress.totalSteps - 1)) * 100}%` }}
+                />
+              </div>
+            </div>
+
+            {/* 현재 단계 메시지 */}
+            <div className="text-center">
+              <div className="flex items-center justify-center gap-2 mb-2">
+                <svg className="animate-spin h-5 w-5 text-orange-500" viewBox="0 0 24 24">
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                </svg>
+                <span className="text-lg font-medium text-slate-700">{publishProgress.message}</span>
+              </div>
+              <p className="text-sm text-slate-500">
+                {publishProgress.totalSteps === 4 ? (
+                  <>
+                    {publishProgress.step === 1 && '잠시만 기다려주세요...'}
+                    {publishProgress.step === 2 && 'AI가 콘텐츠를 분석하고 글을 작성하고 있습니다.'}
+                    {publishProgress.step === 3 && '티스토리에 글을 발행하고 있습니다.'}
+                  </>
+                ) : (
+                  <>
+                    {publishProgress.step === 1 && '잠시만 기다려주세요...'}
+                    {publishProgress.step === 2 && '티스토리에 글을 발행하고 있습니다.'}
+                  </>
+                )}
+              </p>
+            </div>
+
+            {/* 단계 설명 */}
+            <div className="mt-6 pt-6 border-t border-slate-200">
+              <div className="space-y-2 text-sm">
+                {publishProgress.totalSteps === 4 ? (
+                  <>
+                    <div className={`flex items-center gap-2 ${publishProgress.step >= 1 ? 'text-slate-700' : 'text-slate-400'}`}>
+                      <span className={publishProgress.step > 1 ? 'text-green-500' : ''}>
+                        {publishProgress.step > 1 ? '✓' : '○'}
+                      </span>
+                      1단계: 발행 준비
+                    </div>
+                    <div className={`flex items-center gap-2 ${publishProgress.step >= 2 ? 'text-slate-700' : 'text-slate-400'}`}>
+                      <span className={publishProgress.step > 2 ? 'text-green-500' : ''}>
+                        {publishProgress.step > 2 ? '✓' : '○'}
+                      </span>
+                      2단계: AI 글 생성
+                    </div>
+                    <div className={`flex items-center gap-2 ${publishProgress.step >= 3 ? 'text-slate-700' : 'text-slate-400'}`}>
+                      <span className={publishProgress.step > 3 ? 'text-green-500' : ''}>
+                        {publishProgress.step > 3 ? '✓' : '○'}
+                      </span>
+                      3단계: 티스토리 발행
+                    </div>
+                    <div className={`flex items-center gap-2 ${publishProgress.step >= 4 ? 'text-slate-700' : 'text-slate-400'}`}>
+                      <span>{publishProgress.step >= 4 ? '✓' : '○'}</span>
+                      4단계: 완료
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    <div className={`flex items-center gap-2 ${publishProgress.step >= 1 ? 'text-slate-700' : 'text-slate-400'}`}>
+                      <span className={publishProgress.step > 1 ? 'text-green-500' : ''}>
+                        {publishProgress.step > 1 ? '✓' : '○'}
+                      </span>
+                      1단계: 발행 준비
+                    </div>
+                    <div className={`flex items-center gap-2 ${publishProgress.step >= 2 ? 'text-slate-700' : 'text-slate-400'}`}>
+                      <span className={publishProgress.step > 2 ? 'text-green-500' : ''}>
+                        {publishProgress.step > 2 ? '✓' : '○'}
+                      </span>
+                      2단계: 티스토리 발행
+                    </div>
+                    <div className={`flex items-center gap-2 ${publishProgress.step >= 3 ? 'text-slate-700' : 'text-slate-400'}`}>
+                      <span>{publishProgress.step >= 3 ? '✓' : '○'}</span>
+                      3단계: 완료
+                    </div>
+                  </>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
       )}
 
       {/* 결과 모달 */}
