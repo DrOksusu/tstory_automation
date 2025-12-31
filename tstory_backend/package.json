@@ -15,6 +15,7 @@
   "license": "ISC",
   "description": "Tistory auto-publish backend with Gemini AI",
   "dependencies": {
+    "@aws-sdk/client-s3": "^3.958.0",
     "@browserbasehq/sdk": "^2.6.0",
     "@google/generative-ai": "^0.24.1",
     "@prisma/client": "^6.19.1",
@@ -23,12 +24,16 @@
     "cors": "^2.8.5",
     "dotenv": "^17.2.3",
     "express": "^5.2.1",
-    "puppeteer": "^24.33.0"
+    "multer": "^2.0.2",
+    "puppeteer": "^24.33.0",
+    "uuid": "^13.0.0"
   },
   "devDependencies": {
     "@types/cors": "^2.8.19",
     "@types/express": "^5.0.6",
+    "@types/multer": "^2.0.0",
     "@types/node": "^25.0.3",
+    "@types/uuid": "^10.0.0",
     "nodemon": "^3.1.11",
     "prisma": "^6.19.1",
     "ts-node": "^10.9.2",

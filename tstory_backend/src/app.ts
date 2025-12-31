@@ -3,6 +3,7 @@ import cors from 'cors';
 import { config } from './config';
 import blogRoutes from './routes/blogRoutes';
 import authRoutes from './routes/authRoutes';
+import uploadRoutes from './routes/uploadRoutes';
 
 // Unhandled error handlers
 process.on('unhandledRejection', (reason, promise) => {
@@ -42,6 +43,7 @@ app.use(express.urlencoded({ extended: true }));
 // Routes
 app.use('/api/blog', blogRoutes);
 app.use('/auth', authRoutes);
+app.use('/api/upload', uploadRoutes);
 
 // Health check
 app.get('/health', (req, res) => {

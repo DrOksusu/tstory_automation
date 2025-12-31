@@ -32,4 +32,12 @@ export const config = {
     projectId: process.env.BROWSERBASE_PROJECT_ID || '',
     enabled: !!process.env.BROWSERBASE_API_KEY && !!process.env.BROWSERBASE_PROJECT_ID,
   },
+
+  // AWS S3 (이미지 업로드용)
+  aws: {
+    accessKeyId: process.env.AWS_ACCESS_KEY_ID || '',
+    secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY || '',
+    region: process.env.AWS_REGION || 'ap-northeast-2',
+    s3Bucket: process.env.AWS_S3_BUCKET || 'tstory-pictures',
+  },
 };

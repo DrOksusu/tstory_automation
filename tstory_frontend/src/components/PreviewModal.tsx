@@ -20,13 +20,16 @@ export default function PreviewModal({ data, onClose, onPublish }: PreviewModalP
     metaDescription: data.metaDescription,
     content: data.content,
   });
-  const [imageUrl, setImageUrl] = useState('');
   const [imageAlt, setImageAlt] = useState('');
   const [showImageInput, setShowImageInput] = useState(false);
+  const [isUploading, setIsUploading] = useState(false);
+  const [uploadError, setUploadError] = useState('');
   const contentRef = useRef<HTMLDivElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
 
   const handlePublishClick = () => {
-    // contentEditable에서 최신 HTML 가져오기
     if (contentRef.current) {
       setEditedData(prev => ({
         ...prev,
@@ -39,14 +42,57 @@ export default function PreviewModal({ data, onClose, onPublish }: PreviewModalP
     });
   };
 
-  const handleInsertImage = () => {
-    if (!imageUrl.trim()) {
-      alert('이미지 URL을 입력해주세요.');
+  const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    // 파일 타입 검증
+    const allowedTypes = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
+    if (!allowedTypes.includes(file.type)) {
+      setUploadError('지원하지 않는 이미지 형식입니다. (jpg, png, gif, webp만 가능)');
       return;
     }
 
+    // 파일 크기 검증 (10MB)
+    if (file.size > 10 * 1024 * 1024) {
+      setUploadError('파일 크기는 10MB 이하여야 합니다.');
+      return;
+    }
+
+    setIsUploading(true);
+    setUploadError('');
+
+    try {
+      const formData = new FormData();
+      formData.append('image', file);
+
+      const response = await fetch(`${API_URL}/api/upload/image`, {
+        method: 'POST',
+        body: formData,
+      });
+
+      const result = await response.json();
+
+      if (result.success && result.url) {
+        insertImageToContent(result.url);
+      } else {
+        setUploadError(result.error || '이미지 업로드에 실패했습니다.');
+      }
+    } catch (error) {
+      console.error('Upload error:', error);
+      setUploadError('이미지 업로드 중 오류가 발생했습니다.');
+    } finally {
+      setIsUploading(false);
+      // 파일 입력 초기화
+      if (fileInputRef.current) {
+        fileInputRef.current.value = '';
+      }
+    }
+  };
+
+  const insertImageToContent = (imageUrl: string) => {
     const imgHtml = `<figure class="imageblock alignCenter">
-  <img src="${imageUrl.trim()}" alt="${imageAlt.trim() || '이미지'}" style="max-width: 100%; height: auto;">
+  <img src="${imageUrl}" alt="${imageAlt.trim() || '이미지'}" style="max-width: 100%; height: auto;">
   ${imageAlt.trim() ? `<figcaption>${imageAlt.trim()}</figcaption>` : ''}
 </figure>`;
 
@@ -73,7 +119,6 @@ export default function PreviewModal({ data, onClose, onPublish }: PreviewModalP
     }
 
     // 입력 필드 초기화
-    setImageUrl('');
     setImageAlt('');
     setShowImageInput(false);
 
@@ -160,22 +205,62 @@ export default function PreviewModal({ data, onClose, onPublish }: PreviewModalP
                 </button>
               </div>
 
-              {/* 이미지 삽입 폼 */}
+              {/* 이미지 업로드 폼 */}
               {showImageInput && (
                 <div className="mb-4 p-4 bg-purple-50 border border-purple-200 rounded-lg">
                   <div className="space-y-3">
+                    {/* 파일 업로드 영역 */}
                     <div>
-                      <label className="block text-xs font-medium text-purple-700 mb-1">
-                        이미지 URL *
+                      <label className="block text-xs font-medium text-purple-700 mb-2">
+                        이미지 파일 선택
                       </label>
-                      <input
-                        type="url"
-                        value={imageUrl}
-                        onChange={(e) => setImageUrl(e.target.value)}
-                        placeholder="https://example.com/image.jpg"
-                        className="w-full px-3 py-2 border border-purple-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-purple-500"
-                      />
+                      <div className="relative">
+                        <input
+                          ref={fileInputRef}
+                          type="file"
+                          accept="image/jpeg,image/png,image/gif,image/webp"
+                          onChange={handleFileSelect}
+                          disabled={isUploading}
+                          className="hidden"
+                          id="image-upload"
+                        />
+                        <label
+                          htmlFor="image-upload"
+                          className={`flex items-center justify-center w-full p-4 border-2 border-dashed rounded-lg cursor-pointer transition-colors ${
+                            isUploading
+                              ? 'border-purple-300 bg-purple-100 cursor-wait'
+                              : 'border-purple-300 hover:border-purple-500 hover:bg-purple-100'
+                          }`}
+                        >
+                          {isUploading ? (
+                            <div className="flex items-center gap-2 text-purple-600">
+                              <svg className="w-5 h-5 animate-spin" fill="none" viewBox="0 0 24 24">
+                                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                              </svg>
+                              <span className="text-sm font-medium">업로드 중...</span>
+                            </div>
+                          ) : (
+                            <div className="flex flex-col items-center gap-2 text-purple-600">
+                              <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+                              </svg>
+                              <span className="text-sm font-medium">클릭하여 이미지 선택</span>
+                              <span className="text-xs text-purple-500">JPG, PNG, GIF, WebP (최대 10MB)</span>
+                            </div>
+                          )}
+                        </label>
+                      </div>
                     </div>
+
+                    {/* 에러 메시지 */}
+                    {uploadError && (
+                      <div className="p-2 bg-red-100 border border-red-300 rounded-lg">
+                        <p className="text-xs text-red-600">{uploadError}</p>
+                      </div>
+                    )}
+
+                    {/* 이미지 설명 (선택사항) */}
                     <div>
                       <label className="block text-xs font-medium text-purple-700 mb-1">
                         이미지 설명 (alt 텍스트, 선택사항)
@@ -188,26 +273,23 @@ export default function PreviewModal({ data, onClose, onPublish }: PreviewModalP
                         className="w-full px-3 py-2 border border-purple-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-purple-500"
                       />
                     </div>
-                    <div className="flex gap-2">
-                      <button
-                        onClick={handleInsertImage}
-                        className="px-4 py-2 bg-purple-600 text-white rounded-lg text-sm font-medium hover:bg-purple-700 transition-colors"
-                      >
-                        삽입하기
-                      </button>
+
+                    {/* 취소 버튼 */}
+                    <div className="flex justify-end">
                       <button
                         onClick={() => {
                           setShowImageInput(false);
-                          setImageUrl('');
                           setImageAlt('');
+                          setUploadError('');
                         }}
                         className="px-4 py-2 bg-slate-200 text-slate-700 rounded-lg text-sm font-medium hover:bg-slate-300 transition-colors"
                       >
-                        취소
+                        닫기
                       </button>
                     </div>
+
                     <p className="text-xs text-purple-600">
-                      * 본문에서 원하는 위치를 클릭한 후 삽입하면 해당 위치에 이미지가 들어갑니다.
+                      * 본문에서 원하는 위치를 클릭한 후 이미지를 선택하면 해당 위치에 삽입됩니다.
                     </p>
                   </div>
                 </div>
