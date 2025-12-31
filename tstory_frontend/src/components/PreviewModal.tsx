@@ -27,7 +27,7 @@ export default function PreviewModal({ data, onClose, onPublish }: PreviewModalP
   const contentRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
+  const API_URL = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:3001';
 
   const handlePublishClick = () => {
     if (contentRef.current) {
