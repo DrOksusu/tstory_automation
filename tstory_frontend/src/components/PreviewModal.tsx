@@ -50,8 +50,11 @@ export default function PreviewModal({ data, onClose, onPublish }: PreviewModalP
       const img = target as HTMLImageElement;
       updateSelectedImage(img);
     } else {
-      // 이미지 외 클릭 시 선택 해제
-      clearSelectedImage();
+      // 이미지 외 클릭 시 선택 해제 (선택된 이미지가 있을 때만)
+      if (selectedImage.element) {
+        clearSelectedImage();
+      }
+      // 선택된 이미지가 없으면 아무것도 하지 않음 (커서 위치 유지)
     }
   };
 
