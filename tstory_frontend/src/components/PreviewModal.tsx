@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useRef, DragEvent } from 'react';
+import { useState, useRef, DragEvent, useEffect, MouseEvent } from 'react';
 
 interface PreviewData {
   title: string;
@@ -14,6 +14,11 @@ interface PreviewModalProps {
   onPublish: (editedData: PreviewData) => void;
 }
 
+interface SelectedImage {
+  element: HTMLImageElement | null;
+  rect: DOMRect | null;
+}
+
 export default function PreviewModal({ data, onClose, onPublish }: PreviewModalProps) {
   const [editedData, setEditedData] = useState<PreviewData>({
     title: data.title,
@@ -22,13 +27,179 @@ export default function PreviewModal({ data, onClose, onPublish }: PreviewModalP
   });
   const [isUploading, setIsUploading] = useState(false);
   const [uploadError, setUploadError] = useState('');
+  const [selectedImage, setSelectedImage] = useState<SelectedImage>({
+    element: null,
+    rect: null,
+  });
+  const [isResizing, setIsResizing] = useState(false);
   const contentRef = useRef<HTMLDivElement>(null);
+  const resizeStartRef = useRef<{ x: number; y: number; width: number; height: number } | null>(null);
   // 드롭 위치를 저장 (리렌더링 영향 없음)
   const dropRangeRef = useRef<Range | null>(null);
   // 드래그 상태도 ref로 관리 (리렌더링 방지)
   const isDraggingRef = useRef(false);
 
   const API_URL = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:3001';
+
+  // 이미지 클릭 핸들러
+  const handleContentClick = (e: MouseEvent<HTMLDivElement>) => {
+    const target = e.target as HTMLElement;
+
+    if (target.tagName === 'IMG') {
+      e.preventDefault();
+      const img = target as HTMLImageElement;
+      updateSelectedImage(img);
+    } else {
+      // 이미지 외 클릭 시 선택 해제
+      clearSelectedImage();
+    }
+  };
+
+  // 선택된 이미지 업데이트
+  const updateSelectedImage = (img: HTMLImageElement) => {
+    // 이전 선택 해제
+    if (selectedImage.element && selectedImage.element !== img) {
+      selectedImage.element.style.outline = '';
+    }
+
+    const rect = img.getBoundingClientRect();
+    const containerRect = contentRef.current?.getBoundingClientRect();
+
+    if (containerRect) {
+      img.style.outline = '2px solid #7c3aed';
+
+      setSelectedImage({
+        element: img,
+        rect: new DOMRect(
+          rect.left - containerRect.left,
+          rect.top - containerRect.top,
+          rect.width,
+          rect.height
+        ),
+      });
+    }
+  };
+
+  // 이미지 선택 해제
+  const clearSelectedImage = () => {
+    if (selectedImage.element) {
+      selectedImage.element.style.outline = '';
+    }
+    setSelectedImage({ element: null, rect: null });
+  };
+
+  // 리사이즈 시작
+  const handleResizeStart = (e: React.MouseEvent, corner: string) => {
+    e.preventDefault();
+    e.stopPropagation();
+
+    if (!selectedImage.element) return;
+
+    setIsResizing(true);
+    resizeStartRef.current = {
+      x: e.clientX,
+      y: e.clientY,
+      width: selectedImage.element.offsetWidth,
+      height: selectedImage.element.offsetHeight,
+    };
+
+    const handleMouseMove = (moveEvent: globalThis.MouseEvent) => {
+      if (!resizeStartRef.current || !selectedImage.element) return;
+
+      const deltaX = moveEvent.clientX - resizeStartRef.current.x;
+      const deltaY = moveEvent.clientY - resizeStartRef.current.y;
+
+      let newWidth = resizeStartRef.current.width;
+
+      // 모서리별 크기 계산
+      if (corner.includes('e')) {
+        newWidth = Math.max(50, resizeStartRef.current.width + deltaX);
+      } else if (corner.includes('w')) {
+        newWidth = Math.max(50, resizeStartRef.current.width - deltaX);
+      }
+
+      // 세로 방향 드래그도 가로 크기에 반영 (비율 유지를 위해)
+      if (corner.includes('s') && !corner.includes('e') && !corner.includes('w')) {
+        const aspectRatio = resizeStartRef.current.width / resizeStartRef.current.height;
+        newWidth = Math.max(50, (resizeStartRef.current.height + deltaY) * aspectRatio);
+      } else if (corner.includes('n') && !corner.includes('e') && !corner.includes('w')) {
+        const aspectRatio = resizeStartRef.current.width / resizeStartRef.current.height;
+        newWidth = Math.max(50, (resizeStartRef.current.height - deltaY) * aspectRatio);
+      }
+
+      // 대각선 드래그는 더 큰 변화량 사용
+      if ((corner === 'se' || corner === 'nw')) {
+        const diagonalDelta = Math.max(Math.abs(deltaX), Math.abs(deltaY));
+        const sign = (deltaX + deltaY) > 0 ? 1 : -1;
+        newWidth = Math.max(50, resizeStartRef.current.width + diagonalDelta * sign);
+      } else if ((corner === 'sw' || corner === 'ne')) {
+        const diagonalDelta = Math.max(Math.abs(deltaX), Math.abs(deltaY));
+        const sign = (deltaX - deltaY) < 0 ? 1 : -1;
+        newWidth = Math.max(50, resizeStartRef.current.width + diagonalDelta * sign);
+      }
+
+      selectedImage.element.style.width = `${newWidth}px`;
+      selectedImage.element.style.height = 'auto';
+
+      // 핸들 위치 업데이트
+      updateSelectedImage(selectedImage.element);
+    };
+
+    const handleMouseUp = () => {
+      setIsResizing(false);
+      resizeStartRef.current = null;
+
+      // state 업데이트
+      if (contentRef.current) {
+        setEditedData(prev => ({
+          ...prev,
+          content: contentRef.current?.innerHTML || prev.content
+        }));
+      }
+
+      document.removeEventListener('mousemove', handleMouseMove);
+      document.removeEventListener('mouseup', handleMouseUp);
+    };
+
+    document.addEventListener('mousemove', handleMouseMove);
+    document.addEventListener('mouseup', handleMouseUp);
+  };
+
+  // 이미지 삭제
+  const handleDeleteImage = () => {
+    if (selectedImage.element) {
+      const figure = selectedImage.element.closest('figure');
+      if (figure) {
+        figure.remove();
+      } else {
+        selectedImage.element.remove();
+      }
+
+      if (contentRef.current) {
+        setEditedData(prev => ({
+          ...prev,
+          content: contentRef.current?.innerHTML || prev.content
+        }));
+      }
+
+      setSelectedImage({ element: null, rect: null });
+    }
+  };
+
+  // ESC 키로 선택 해제
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && selectedImage.element) {
+        clearSelectedImage();
+      }
+      if (e.key === 'Delete' && selectedImage.element) {
+        handleDeleteImage();
+      }
+    };
+
+    document.addEventListener('keydown', handleKeyDown);
+    return () => document.removeEventListener('keydown', handleKeyDown);
+  }, [selectedImage.element]);
 
   const handlePublishClick = () => {
     if (contentRef.current) {
@@ -391,6 +562,7 @@ export default function PreviewModal({ data, onClose, onPublish }: PreviewModalP
                       }));
                     }
                   }}
+                  onClick={handleContentClick}
                   onDragOver={handleDragOver}
                   onDragEnter={handleDragEnter}
                   onDragLeave={handleDragLeave}
@@ -398,6 +570,54 @@ export default function PreviewModal({ data, onClose, onPublish }: PreviewModalP
                   className="prose prose-slate max-w-none p-4 rounded-lg border-2 transition-all min-h-[400px] cursor-text border-slate-200 bg-slate-50 hover:bg-white focus:bg-white hover:border-slate-300 focus:border-orange-500 focus:outline-none"
                   dangerouslySetInnerHTML={{ __html: editedData.content }}
                 />
+
+                {/* 이미지 리사이즈 핸들 */}
+                {selectedImage.element && selectedImage.rect && (
+                  <>
+                    {/* 리사이즈 핸들 - 8방향 */}
+                    {['nw', 'n', 'ne', 'e', 'se', 's', 'sw', 'w'].map((corner) => {
+                      const rect = selectedImage.rect!;
+                      let left = rect.x;
+                      let top = rect.y;
+                      let cursor = 'default';
+
+                      switch (corner) {
+                        case 'nw': left = rect.x - 4; top = rect.y - 4; cursor = 'nwse-resize'; break;
+                        case 'n': left = rect.x + rect.width / 2 - 4; top = rect.y - 4; cursor = 'ns-resize'; break;
+                        case 'ne': left = rect.x + rect.width - 4; top = rect.y - 4; cursor = 'nesw-resize'; break;
+                        case 'e': left = rect.x + rect.width - 4; top = rect.y + rect.height / 2 - 4; cursor = 'ew-resize'; break;
+                        case 'se': left = rect.x + rect.width - 4; top = rect.y + rect.height - 4; cursor = 'nwse-resize'; break;
+                        case 's': left = rect.x + rect.width / 2 - 4; top = rect.y + rect.height - 4; cursor = 'ns-resize'; break;
+                        case 'sw': left = rect.x - 4; top = rect.y + rect.height - 4; cursor = 'nesw-resize'; break;
+                        case 'w': left = rect.x - 4; top = rect.y + rect.height / 2 - 4; cursor = 'ew-resize'; break;
+                      }
+
+                      return (
+                        <div
+                          key={corner}
+                          className="absolute w-3 h-3 bg-purple-600 border-2 border-white rounded-sm shadow-md z-30"
+                          style={{ left, top, cursor }}
+                          onMouseDown={(e) => handleResizeStart(e, corner)}
+                        />
+                      );
+                    })}
+
+                    {/* 삭제 버튼 */}
+                    <button
+                      className="absolute z-30 w-6 h-6 bg-red-500 hover:bg-red-600 text-white rounded-full shadow-lg flex items-center justify-center transition-colors"
+                      style={{
+                        left: selectedImage.rect.x + selectedImage.rect.width - 8,
+                        top: selectedImage.rect.y - 8,
+                      }}
+                      onClick={handleDeleteImage}
+                      title="이미지 삭제 (Delete 키)"
+                    >
+                      <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M6 18L18 6M6 6l12 12" />
+                      </svg>
+                    </button>
+                  </>
+                )}
 
                 {/* 업로드 중 오버레이 */}
                 {isUploading && (
@@ -415,7 +635,7 @@ export default function PreviewModal({ data, onClose, onPublish }: PreviewModalP
               </div>
 
               <p className="mt-2 text-xs text-slate-400">
-                본문을 클릭하면 바로 편집할 수 있습니다. 이미지는 파일을 드래그하여 원하는 위치에 놓으면 자동으로 업로드됩니다.
+                본문을 클릭하면 바로 편집할 수 있습니다. 이미지를 드래그하여 원하는 위치에 놓거나, 이미지를 클릭하여 크기를 조절하세요.
               </p>
             </div>
           </div>
