@@ -117,11 +117,25 @@ export default function PreviewModal({ data, onClose, onPublish }: PreviewModalP
     const placeholderId = `img-placeholder-${Date.now()}`;
     const range = document.caretRangeFromPoint(e.clientX, e.clientY);
 
+    console.log('=== 드래그 앤 드롭 디버그 ===');
+    console.log('드롭 좌표:', { clientX: e.clientX, clientY: e.clientY });
+    console.log('caretRangeFromPoint 결과:', range);
+    console.log('range.startContainer:', range?.startContainer);
+    console.log('range.startContainer.nodeName:', range?.startContainer?.nodeName);
+    console.log('range.startContainer.textContent:', range?.startContainer?.textContent?.substring(0, 50));
+    console.log('range.startOffset:', range?.startOffset);
+    console.log('contentRef.current:', contentRef.current);
+    console.log('contains 체크:', contentRef.current?.contains(range?.startContainer || null));
+
     if (range && contentRef.current?.contains(range.startContainer)) {
+      console.log('✅ 플레이스홀더 삽입 시도');
       const placeholder = document.createElement('span');
       placeholder.id = placeholderId;
       placeholder.innerHTML = '<span style="display:inline-block;padding:8px 16px;background:#f3e8ff;border-radius:8px;color:#7c3aed;font-size:12px;">이미지 업로드 중...</span>';
       range.insertNode(placeholder);
+      console.log('✅ 플레이스홀더 삽입 완료');
+    } else {
+      console.log('❌ 플레이스홀더 삽입 실패 - range 또는 contains 체크 실패');
     }
 
     setIsUploading(true);
