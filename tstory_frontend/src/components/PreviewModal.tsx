@@ -113,8 +113,16 @@ export default function PreviewModal({ data, onClose, onPublish }: PreviewModalP
       return;
     }
 
-    // 드롭 위치 저장
-    const dropPosition = dropPositionRef.current;
+    // 드롭 위치에 플레이스홀더 삽입
+    const placeholderId = `img-placeholder-${Date.now()}`;
+    const range = document.caretRangeFromPoint(e.clientX, e.clientY);
+
+    if (range && contentRef.current?.contains(range.startContainer)) {
+      const placeholder = document.createElement('span');
+      placeholder.id = placeholderId;
+      placeholder.innerHTML = '<span style="display:inline-block;padding:8px 16px;background:#f3e8ff;border-radius:8px;color:#7c3aed;font-size:12px;">이미지 업로드 중...</span>';
+      range.insertNode(placeholder);
+    }
 
     setIsUploading(true);
     setUploadError('');
@@ -131,13 +139,39 @@ export default function PreviewModal({ data, onClose, onPublish }: PreviewModalP
       const result = await response.json();
 
       if (result.success && result.url) {
-        insertImageAtPosition(result.url, dropPosition);
+        // 플레이스홀더를 이미지로 교체
+        const placeholder = document.getElementById(placeholderId);
+        if (placeholder && contentRef.current?.contains(placeholder)) {
+          const imgHtml = `<figure class="imageblock alignCenter">
+  <img src="${result.url}" alt="이미지" style="max-width: 100%; height: auto;">
+</figure>`;
+          const template = document.createElement('template');
+          template.innerHTML = imgHtml;
+          placeholder.replaceWith(template.content);
+        } else {
+          // 플레이스홀더가 없으면 맨 끝에 추가
+          insertImageAtPosition(result.url, null);
+        }
+
+        // content state 업데이트
+        if (contentRef.current) {
+          setEditedData(prev => ({
+            ...prev,
+            content: contentRef.current?.innerHTML || prev.content
+          }));
+        }
       } else {
+        // 업로드 실패 시 플레이스홀더 제거
+        const placeholder = document.getElementById(placeholderId);
+        placeholder?.remove();
         setUploadError(result.error || '이미지 업로드에 실패했습니다.');
         setTimeout(() => setUploadError(''), 3000);
       }
     } catch (error) {
       console.error('Upload error:', error);
+      // 에러 시 플레이스홀더 제거
+      const placeholder = document.getElementById(placeholderId);
+      placeholder?.remove();
       setUploadError('이미지 업로드 중 오류가 발생했습니다.');
       setTimeout(() => setUploadError(''), 3000);
     } finally {
