@@ -213,6 +213,7 @@ export default function PreviewModal({ data, onClose, onPublish }: PreviewModalP
                   본문 내용
                 </label>
                 <button
+                  onMouseDown={saveSelection}
                   onClick={() => setShowImageInput(!showImageInput)}
                   className="flex items-center gap-1.5 px-3 py-1.5 bg-purple-100 text-purple-700 hover:bg-purple-200 rounded-lg text-sm font-medium transition-colors"
                 >
@@ -244,7 +245,6 @@ export default function PreviewModal({ data, onClose, onPublish }: PreviewModalP
                         />
                         <label
                           htmlFor="image-upload"
-                          onMouseDown={saveSelection}
                           className={`flex items-center justify-center w-full p-4 border-2 border-dashed rounded-lg cursor-pointer transition-colors ${
                             isUploading
                               ? 'border-purple-300 bg-purple-100 cursor-wait'
