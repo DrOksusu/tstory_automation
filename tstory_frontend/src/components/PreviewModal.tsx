@@ -26,8 +26,17 @@ export default function PreviewModal({ data, onClose, onPublish }: PreviewModalP
   const [uploadError, setUploadError] = useState('');
   const contentRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const savedRangeRef = useRef<Range | null>(null);
 
   const API_URL = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:3001';
+
+  // 현재 커서 위치 저장
+  const saveSelection = () => {
+    const selection = window.getSelection();
+    if (selection && selection.rangeCount > 0 && contentRef.current?.contains(selection.anchorNode)) {
+      savedRangeRef.current = selection.getRangeAt(0).cloneRange();
+    }
+  };
 
   const handlePublishClick = () => {
     if (contentRef.current) {
@@ -96,23 +105,32 @@ export default function PreviewModal({ data, onClose, onPublish }: PreviewModalP
   ${imageAlt.trim() ? `<figcaption>${imageAlt.trim()}</figcaption>` : ''}
 </figure>`;
 
-    // 현재 커서 위치에 이미지 삽입
-    const selection = window.getSelection();
-    if (selection && selection.rangeCount > 0 && contentRef.current?.contains(selection.anchorNode)) {
-      const range = selection.getRangeAt(0);
-      range.deleteContents();
+    // 저장된 커서 위치에 이미지 삽입
+    if (savedRangeRef.current && contentRef.current) {
+      const selection = window.getSelection();
+      if (selection) {
+        // 저장된 위치 복원
+        selection.removeAllRanges();
+        selection.addRange(savedRangeRef.current);
 
-      const template = document.createElement('template');
-      template.innerHTML = imgHtml;
-      const fragment = template.content;
-      range.insertNode(fragment);
+        const range = selection.getRangeAt(0);
+        range.deleteContents();
 
-      // 커서를 삽입된 이미지 뒤로 이동
-      range.collapse(false);
-      selection.removeAllRanges();
-      selection.addRange(range);
+        const template = document.createElement('template');
+        template.innerHTML = imgHtml;
+        const fragment = template.content;
+        range.insertNode(fragment);
+
+        // 커서를 삽입된 이미지 뒤로 이동
+        range.collapse(false);
+        selection.removeAllRanges();
+        selection.addRange(range);
+
+        // 저장된 range 초기화
+        savedRangeRef.current = null;
+      }
     } else {
-      // 커서가 없으면 맨 끝에 추가
+      // 저장된 커서가 없으면 맨 끝에 추가
       if (contentRef.current) {
         contentRef.current.innerHTML += imgHtml;
       }
@@ -226,6 +244,7 @@ export default function PreviewModal({ data, onClose, onPublish }: PreviewModalP
                         />
                         <label
                           htmlFor="image-upload"
+                          onMouseDown={saveSelection}
                           className={`flex items-center justify-center w-full p-4 border-2 border-dashed rounded-lg cursor-pointer transition-colors ${
                             isUploading
                               ? 'border-purple-300 bg-purple-100 cursor-wait'
