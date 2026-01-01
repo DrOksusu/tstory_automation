@@ -21,10 +21,12 @@ export default function PreviewModal({ data, onClose, onPublish }: PreviewModalP
     content: data.content,
   });
   const [isUploading, setIsUploading] = useState(false);
-  const [isDragging, setIsDragging] = useState(false);
   const [uploadError, setUploadError] = useState('');
   const contentRef = useRef<HTMLDivElement>(null);
-  const dropPositionRef = useRef<{ node: Node; offset: number } | null>(null);
+  // 드롭 위치를 저장 (리렌더링 영향 없음)
+  const dropRangeRef = useRef<Range | null>(null);
+  // 드래그 상태도 ref로 관리 (리렌더링 방지)
+  const isDraggingRef = useRef(false);
 
   const API_URL = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:3001';
 
@@ -41,31 +43,55 @@ export default function PreviewModal({ data, onClose, onPublish }: PreviewModalP
     });
   };
 
-  // 드래그 이벤트 핸들러
+  // 드래그 시각 효과 적용/제거 (DOM 직접 조작)
+  const setDragStyle = (active: boolean) => {
+    if (contentRef.current) {
+      if (active) {
+        contentRef.current.classList.add('border-purple-500', 'bg-purple-50', 'border-dashed');
+        contentRef.current.classList.remove('border-slate-200', 'bg-slate-50');
+      } else {
+        contentRef.current.classList.remove('border-purple-500', 'bg-purple-50', 'border-dashed');
+        contentRef.current.classList.add('border-slate-200', 'bg-slate-50');
+      }
+    }
+  };
+
+  // 드래그 이벤트 핸들러 (리렌더링 없이 ref만 사용)
   const handleDragOver = (e: DragEvent<HTMLDivElement>) => {
     e.preventDefault();
     e.stopPropagation();
 
-    if (!isDragging) {
-      setIsDragging(true);
+    // 드롭 위치 저장 (DOM 조작 없이 range만 저장)
+    const range = document.caretRangeFromPoint(e.clientX, e.clientY);
+
+    // 디버깅: 매 드래그마다 출력하면 너무 많으니 첫 번째만
+    if (!isDraggingRef.current) {
+      console.log('=== DRAGOVER DEBUG (first) ===');
+      console.log('clientX, clientY:', e.clientX, e.clientY);
+      console.log('caretRangeFromPoint result:', range);
+      console.log('range?.startContainer:', range?.startContainer);
+      console.log('range?.startContainer.nodeName:', range?.startContainer?.nodeName);
+      console.log('contentRef.current:', contentRef.current);
+      console.log('contains check:', range ? contentRef.current?.contains(range.startContainer) : 'no range');
     }
 
-    // 드롭 위치 계산 (마우스 위치 기준)
-    if (contentRef.current) {
-      const range = document.caretRangeFromPoint(e.clientX, e.clientY);
-      if (range) {
-        dropPositionRef.current = {
-          node: range.startContainer,
-          offset: range.startOffset
-        };
-      }
+    if (range && contentRef.current?.contains(range.startContainer)) {
+      dropRangeRef.current = range.cloneRange();
+    }
+
+    if (!isDraggingRef.current) {
+      isDraggingRef.current = true;
+      setDragStyle(true);
     }
   };
 
   const handleDragEnter = (e: DragEvent<HTMLDivElement>) => {
     e.preventDefault();
     e.stopPropagation();
-    setIsDragging(true);
+    if (!isDraggingRef.current) {
+      isDraggingRef.current = true;
+      setDragStyle(true);
+    }
   };
 
   const handleDragLeave = (e: DragEvent<HTMLDivElement>) => {
@@ -82,8 +108,9 @@ export default function PreviewModal({ data, onClose, onPublish }: PreviewModalP
         clientY < rect.top ||
         clientY > rect.bottom
       ) {
-        setIsDragging(false);
-        dropPositionRef.current = null;
+        isDraggingRef.current = false;
+        dropRangeRef.current = null;
+        setDragStyle(false);
       }
     }
   };
@@ -91,12 +118,30 @@ export default function PreviewModal({ data, onClose, onPublish }: PreviewModalP
   const handleDrop = async (e: DragEvent<HTMLDivElement>) => {
     e.preventDefault();
     e.stopPropagation();
-    setIsDragging(false);
+    isDraggingRef.current = false;
+    setDragStyle(false);
+
+    // 저장된 드롭 위치
+    const savedRange = dropRangeRef.current;
+    dropRangeRef.current = null;
+
+    console.log('=== DROP DEBUG ===');
+    console.log('1. savedRange:', savedRange);
+    console.log('2. savedRange?.startContainer:', savedRange?.startContainer);
+    console.log('3. savedRange?.startContainer.nodeName:', savedRange?.startContainer?.nodeName);
+    console.log('4. savedRange?.startContainer.textContent (first 50):', savedRange?.startContainer?.textContent?.substring(0, 50));
+    console.log('5. savedRange?.startOffset:', savedRange?.startOffset);
+    console.log('6. contentRef.current:', contentRef.current);
+    console.log('7. contains check:', savedRange ? contentRef.current?.contains(savedRange.startContainer) : 'no range');
 
     const files = e.dataTransfer.files;
-    if (files.length === 0) return;
+    if (files.length === 0) {
+      console.log('8. No files');
+      return;
+    }
 
     const file = files[0];
+    console.log('9. File:', file.name, file.type, file.size);
 
     // 파일 타입 검증
     const allowedTypes = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
@@ -113,33 +158,41 @@ export default function PreviewModal({ data, onClose, onPublish }: PreviewModalP
       return;
     }
 
-    // 드롭 위치에 플레이스홀더 삽입
+    // 저장된 range 위치에 플레이스홀더 삽입
     const placeholderId = `img-placeholder-${Date.now()}`;
-    const range = document.caretRangeFromPoint(e.clientX, e.clientY);
+    let placeholderInserted = false;
 
-    console.log('=== 드래그 앤 드롭 디버그 ===');
-    console.log('드롭 좌표:', { clientX: e.clientX, clientY: e.clientY });
-    console.log('caretRangeFromPoint 결과:', range);
-    console.log('range.startContainer:', range?.startContainer);
-    console.log('range.startContainer.nodeName:', range?.startContainer?.nodeName);
-    console.log('range.startContainer.textContent:', range?.startContainer?.textContent?.substring(0, 50));
-    console.log('range.startOffset:', range?.startOffset);
-    console.log('contentRef.current:', contentRef.current);
-    console.log('contains 체크:', contentRef.current?.contains(range?.startContainer || null));
+    if (savedRange && contentRef.current) {
+      try {
+        // range의 startContainer가 아직 contentRef 안에 있는지 확인
+        if (contentRef.current.contains(savedRange.startContainer)) {
+          const placeholder = document.createElement('span');
+          placeholder.id = placeholderId;
+          placeholder.innerHTML = '<span style="display:inline-block;padding:8px 16px;background:#f3e8ff;border-radius:8px;color:#7c3aed;font-size:12px;">이미지 업로드 중...</span>';
 
-    if (range && contentRef.current?.contains(range.startContainer)) {
-      console.log('✅ 플레이스홀더 삽입 시도');
-      const placeholder = document.createElement('span');
-      placeholder.id = placeholderId;
-      placeholder.innerHTML = '<span style="display:inline-block;padding:8px 16px;background:#f3e8ff;border-radius:8px;color:#7c3aed;font-size:12px;">이미지 업로드 중...</span>';
-      range.insertNode(placeholder);
-      console.log('✅ 플레이스홀더 삽입 완료');
+          savedRange.insertNode(placeholder);
+          placeholderInserted = true;
+          console.log('10. Placeholder inserted:', placeholderId);
+
+          // 핵심: placeholder 삽입 후 바로 state 업데이트하여 리렌더링 시에도 유지
+          setEditedData(prev => ({
+            ...prev,
+            content: contentRef.current?.innerHTML || prev.content
+          }));
+          console.log('11. State updated with placeholder');
+        } else {
+          console.log('10. Range not in contentRef');
+        }
+      } catch (err) {
+        console.error('10. Failed to insert placeholder:', err);
+      }
     } else {
-      console.log('❌ 플레이스홀더 삽입 실패 - range 또는 contains 체크 실패');
+      console.log('10. No savedRange or contentRef:', { savedRange: !!savedRange, contentRef: !!contentRef.current });
     }
 
     setIsUploading(true);
     setUploadError('');
+    console.log('12. Upload started, placeholderInserted:', placeholderInserted);
 
     try {
       const formData = new FormData();
@@ -190,7 +243,6 @@ export default function PreviewModal({ data, onClose, onPublish }: PreviewModalP
       setTimeout(() => setUploadError(''), 3000);
     } finally {
       setIsUploading(false);
-      dropPositionRef.current = null;
     }
   };
 
@@ -343,11 +395,7 @@ export default function PreviewModal({ data, onClose, onPublish }: PreviewModalP
                   onDragEnter={handleDragEnter}
                   onDragLeave={handleDragLeave}
                   onDrop={handleDrop}
-                  className={`prose prose-slate max-w-none p-4 rounded-lg border-2 transition-all min-h-[400px] cursor-text ${
-                    isDragging
-                      ? 'border-purple-500 bg-purple-50 border-dashed'
-                      : 'border-slate-200 bg-slate-50 hover:bg-white focus:bg-white hover:border-slate-300 focus:border-orange-500'
-                  } focus:outline-none`}
+                  className="prose prose-slate max-w-none p-4 rounded-lg border-2 transition-all min-h-[400px] cursor-text border-slate-200 bg-slate-50 hover:bg-white focus:bg-white hover:border-slate-300 focus:border-orange-500 focus:outline-none"
                   dangerouslySetInnerHTML={{ __html: editedData.content }}
                 />
 
@@ -364,17 +412,6 @@ export default function PreviewModal({ data, onClose, onPublish }: PreviewModalP
                   </div>
                 )}
 
-                {/* 드래그 오버레이 */}
-                {isDragging && !isUploading && (
-                  <div className="absolute inset-0 bg-purple-100/50 rounded-lg flex items-center justify-center pointer-events-none">
-                    <div className="flex flex-col items-center gap-2 text-purple-600">
-                      <svg className="w-12 h-12" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
-                      </svg>
-                      <span className="font-medium">여기에 이미지를 놓으세요</span>
-                    </div>
-                  </div>
-                )}
               </div>
 
               <p className="mt-2 text-xs text-slate-400">
