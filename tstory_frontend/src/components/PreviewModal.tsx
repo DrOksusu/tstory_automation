@@ -31,9 +31,7 @@ export default function PreviewModal({ data, onClose, onPublish }: PreviewModalP
     element: null,
     rect: null,
   });
-  const [isResizing, setIsResizing] = useState(false);
   const contentRef = useRef<HTMLDivElement>(null);
-  const resizeStartRef = useRef<{ x: number; y: number; width: number; height: number } | null>(null);
   // 드롭 위치를 저장 (리렌더링 영향 없음)
   const dropRangeRef = useRef<Range | null>(null);
   // 드래그 상태도 ref로 관리 (리렌더링 방지)
@@ -96,62 +94,56 @@ export default function PreviewModal({ data, onClose, onPublish }: PreviewModalP
     e.preventDefault();
     e.stopPropagation();
 
-    if (!selectedImage.element) return;
+    // 현재 선택된 이미지를 로컬 변수로 저장 (클로저에서 사용)
+    const targetImage = selectedImage.element;
+    if (!targetImage) return;
 
-    setIsResizing(true);
-    resizeStartRef.current = {
-      x: e.clientX,
-      y: e.clientY,
-      width: selectedImage.element.offsetWidth,
-      height: selectedImage.element.offsetHeight,
-    };
+    const startX = e.clientX;
+    const startY = e.clientY;
+    const startWidth = targetImage.offsetWidth;
+    const startHeight = targetImage.offsetHeight;
 
     const handleMouseMove = (moveEvent: globalThis.MouseEvent) => {
-      if (!resizeStartRef.current || !selectedImage.element) return;
+      const deltaX = moveEvent.clientX - startX;
+      const deltaY = moveEvent.clientY - startY;
 
-      const deltaX = moveEvent.clientX - resizeStartRef.current.x;
-      const deltaY = moveEvent.clientY - resizeStartRef.current.y;
-
-      let newWidth = resizeStartRef.current.width;
+      let newWidth = startWidth;
 
       // 모서리별 크기 계산
       if (corner.includes('e')) {
-        newWidth = Math.max(50, resizeStartRef.current.width + deltaX);
+        newWidth = Math.max(50, startWidth + deltaX);
       } else if (corner.includes('w')) {
-        newWidth = Math.max(50, resizeStartRef.current.width - deltaX);
+        newWidth = Math.max(50, startWidth - deltaX);
       }
 
       // 세로 방향 드래그도 가로 크기에 반영 (비율 유지를 위해)
       if (corner.includes('s') && !corner.includes('e') && !corner.includes('w')) {
-        const aspectRatio = resizeStartRef.current.width / resizeStartRef.current.height;
-        newWidth = Math.max(50, (resizeStartRef.current.height + deltaY) * aspectRatio);
+        const aspectRatio = startWidth / startHeight;
+        newWidth = Math.max(50, (startHeight + deltaY) * aspectRatio);
       } else if (corner.includes('n') && !corner.includes('e') && !corner.includes('w')) {
-        const aspectRatio = resizeStartRef.current.width / resizeStartRef.current.height;
-        newWidth = Math.max(50, (resizeStartRef.current.height - deltaY) * aspectRatio);
+        const aspectRatio = startWidth / startHeight;
+        newWidth = Math.max(50, (startHeight - deltaY) * aspectRatio);
       }
 
       // 대각선 드래그는 더 큰 변화량 사용
       if ((corner === 'se' || corner === 'nw')) {
         const diagonalDelta = Math.max(Math.abs(deltaX), Math.abs(deltaY));
         const sign = (deltaX + deltaY) > 0 ? 1 : -1;
-        newWidth = Math.max(50, resizeStartRef.current.width + diagonalDelta * sign);
+        newWidth = Math.max(50, startWidth + diagonalDelta * sign);
       } else if ((corner === 'sw' || corner === 'ne')) {
         const diagonalDelta = Math.max(Math.abs(deltaX), Math.abs(deltaY));
         const sign = (deltaX - deltaY) < 0 ? 1 : -1;
-        newWidth = Math.max(50, resizeStartRef.current.width + diagonalDelta * sign);
+        newWidth = Math.max(50, startWidth + diagonalDelta * sign);
       }
 
-      selectedImage.element.style.width = `${newWidth}px`;
-      selectedImage.element.style.height = 'auto';
+      targetImage.style.width = `${newWidth}px`;
+      targetImage.style.height = 'auto';
 
       // 핸들 위치 업데이트
-      updateSelectedImage(selectedImage.element);
+      updateSelectedImage(targetImage);
     };
 
     const handleMouseUp = () => {
-      setIsResizing(false);
-      resizeStartRef.current = null;
-
       // state 업데이트
       if (contentRef.current) {
         setEditedData(prev => ({
