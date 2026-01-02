@@ -176,7 +176,7 @@ export default function Home() {
       const startResponse = await fetch('/api/blog/start-generate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(formData),
+        body: JSON.stringify({ ...formData, userEmail: user?.email }),
       });
 
       if (!startResponse.ok) {
@@ -266,6 +266,7 @@ export default function Home() {
           title: editedData.title,
           content: editedData.content,
           metaDescription: editedData.metaDescription,
+          userEmail: user?.email,
         }),
       });
 

@@ -2,6 +2,7 @@ export interface GenerateBlogRequest {
   sourceUrl: string;      // 참고할 블로그 링크
   mainKeyword: string;    // 메인 키워드
   regionKeyword: string;  // 지역 키워드
+  userEmail?: string;     // 사용자 이메일 (쿠키 로드용)
 }
 
 export interface GeneratedContent {

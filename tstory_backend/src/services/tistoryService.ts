@@ -453,8 +453,9 @@ export async function publishToTistory(params: {
   title: string;
   content: string;
   tag?: string;
+  userEmail?: string;
 }): Promise<TistoryPublishResult> {
-  const { title, content, tag } = params;
+  const { title, content, tag, userEmail } = params;
 
   let browser: Browser | null = null;
   let useBrowserbase = false;
@@ -508,8 +509,8 @@ export async function publishToTistory(params: {
     );
 
     // 쿠키 로드 시도
-    const cookiesLoaded = await loadCookies(page);
-    console.log(`Cookies loaded: ${cookiesLoaded}`);
+    const cookiesLoaded = await loadCookies(page, userEmail);
+    console.log(`Cookies loaded: ${cookiesLoaded} (user: ${userEmail || 'none'})`);
 
     // 로그인 상태 확인
     const loggedIn = await isLoggedIn(page);
