@@ -1,6 +1,8 @@
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
+import { useAuth } from '@/contexts/AuthContext';
 import BlogForm from '@/components/BlogForm';
 import PreviewModal from '@/components/PreviewModal';
 import ResultModal from '@/components/ResultModal';
@@ -19,15 +21,8 @@ interface PublishResult {
   error?: string;
 }
 
-interface LoginStatus {
-  message: string;
-  success: boolean;
-  liveViewUrl?: string;
-}
-
-interface SavedLoginInfo {
-  loggedIn: boolean;
-  userEmail?: string;
+interface TistoryCookieStatus {
+  exists: boolean;
   savedAt?: string;
 }
 
@@ -39,6 +34,8 @@ interface PublishProgress {
 }
 
 export default function Home() {
+  const { user, isLoading } = useAuth();
+  const router = useRouter();
   const [loading, setLoading] = useState(false);
   const [loadingType, setLoadingType] = useState<'preview' | 'publish' | null>(null);
   const [previewData, setPreviewData] = useState<PreviewData | null>(null);
@@ -49,282 +46,55 @@ export default function Home() {
     mainKeyword: '',
     regionKeyword: '',
   });
-  const [loginLoading, setLoginLoading] = useState(false);
-  const [loginStatus, setLoginStatus] = useState<LoginStatus | null>(null);
-  const [savedLoginInfo, setSavedLoginInfo] = useState<SavedLoginInfo | null>(null);
-  const [checkingLogin, setCheckingLogin] = useState(true);
-  const loginSessionIdRef = useRef<string | null>(null);
-  const [kakaoCredentials, setKakaoCredentials] = useState({ email: '', password: '' });
+  const [cookieStatus, setCookieStatus] = useState<TistoryCookieStatus | null>(null);
+  const [checkingCookies, setCheckingCookies] = useState(true);
 
-  // 페이지 로드 시 로그인 상태 확인
+  // 로그인하지 않은 경우 로그인 페이지로 리다이렉트
   useEffect(() => {
-    const checkLoginStatus = async () => {
+    if (!isLoading && !user) {
+      router.push('/login');
+    }
+  }, [user, isLoading, router]);
+
+  // 페이지 로드 시 티스토리 쿠키 상태 확인
+  useEffect(() => {
+    const checkCookieStatus = async () => {
+      if (!user?.email) return;
+
       try {
-        const response = await fetch('/auth/check-login');
+        const response = await fetch(`/auth/check-login?email=${encodeURIComponent(user.email)}`);
         const data = await response.json();
-        setSavedLoginInfo({
-          loggedIn: data.loggedIn,
-          userEmail: data.userEmail,
+        setCookieStatus({
+          exists: data.loggedIn,
           savedAt: data.savedAt,
         });
       } catch (error) {
-        console.error('Failed to check login status:', error);
-        setSavedLoginInfo({ loggedIn: false });
+        console.error('Failed to check cookie status:', error);
+        setCookieStatus({ exists: false });
       } finally {
-        setCheckingLogin(false);
+        setCheckingCookies(false);
       }
     };
 
-    checkLoginStatus();
-  }, []);
-
-  // 페이지 종료 시 로그인 세션 취소
-  useEffect(() => {
-    const cancelLoginSession = async () => {
-      if (loginSessionIdRef.current) {
-        try {
-          await fetch(`/auth/login-session/${loginSessionIdRef.current}`, {
-            method: 'DELETE',
-          });
-          console.log('Login session cancelled on page close');
-        } catch (e) {
-          console.error('Failed to cancel login session:', e);
-        }
-      }
-    };
-
-    const handleBeforeUnload = () => {
-      if (loginSessionIdRef.current) {
-        // sendBeacon을 사용하여 페이지 종료 시에도 요청 전송
-        navigator.sendBeacon(`/auth/login-session/${loginSessionIdRef.current}?_method=DELETE`);
-      }
-    };
-
-    window.addEventListener('beforeunload', handleBeforeUnload);
-
-    return () => {
-      window.removeEventListener('beforeunload', handleBeforeUnload);
-      cancelLoginSession();
-    };
-  }, []);
-
-  // 자격 증명 기반 자동 로그인
-  const handleCredentialLogin = async () => {
-    if (!kakaoCredentials.email || !kakaoCredentials.password) {
-      setLoginStatus({
-        success: false,
-        message: '카카오 이메일과 비밀번호를 입력해주세요.',
-      });
-      return;
+    if (user?.email) {
+      checkCookieStatus();
     }
-
-    setLoginLoading(true);
-    setLoginStatus({ success: false, message: '로그인 중...' });
-
-    try {
-      const response = await fetch('/auth/test-login', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          email: kakaoCredentials.email,
-          password: kakaoCredentials.password,
-        }),
-      });
-
-      const data = await response.json();
-
-      if (data.success) {
-        setLoginStatus({
-          success: true,
-          message: data.message || '로그인 성공!',
-        });
-        setSavedLoginInfo({
-          loggedIn: true,
-          userEmail: data.userEmail || kakaoCredentials.email,
-          savedAt: new Date().toISOString(),
-        });
-        // 로그인 성공 후 입력 필드 초기화
-        setKakaoCredentials({ email: '', password: '' });
-      } else {
-        setLoginStatus({
-          success: false,
-          message: data.message || '로그인에 실패했습니다.',
-        });
-      }
-    } catch (error) {
-      let message = '서버 연결에 실패했습니다.';
-      if (error instanceof Error) {
-        message = error.message;
-      }
-      setLoginStatus({
-        success: false,
-        message,
-      });
-      console.error(error);
-    } finally {
-      setLoginLoading(false);
-    }
-  };
-
-  const handleManualLogin = async () => {
-    if (!kakaoCredentials.email) {
-      setLoginStatus({
-        success: false,
-        message: '수동 로그인도 이메일 입력이 필요합니다.',
-      });
-      return;
-    }
-
-    setLoginLoading(true);
-    setLoginStatus(null);
-
-    try {
-      // 1. 로그인 세션 시작 (이메일과 함께)
-      const startResponse = await fetch('/auth/start-login', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email: kakaoCredentials.email }),
-      });
-
-      if (!startResponse.ok) {
-        const errorData = await startResponse.json();
-        throw new Error(errorData.message || errorData.error || '로그인 시작에 실패했습니다.');
-      }
-
-      const startData = await startResponse.json();
-      const { sessionId, liveViewUrl } = startData;
-
-      if (!sessionId) {
-        throw new Error('세션 ID를 받지 못했습니다.');
-      }
-
-      // 세션 ID 저장 (페이지 종료 시 취소용)
-      loginSessionIdRef.current = sessionId;
-
-      // 라이브 뷰 URL이 있으면 (Browserbase 사용 중) 새 창으로 열기
-      if (liveViewUrl) {
-        setLoginStatus({
-          success: false,
-          message: '라이브 뷰에서 카카오 로그인을 완료해주세요.',
-          liveViewUrl,
-        });
-        // 새 창으로 라이브 뷰 열기
-        window.open(liveViewUrl, 'browserbase-login', 'width=1300,height=800');
-      } else {
-        setLoginStatus({
-          success: false,
-          message: '로컬 브라우저에서 카카오 로그인을 완료해주세요...',
-        });
-      }
-
-      // 2. 폴링으로 로그인 상태 확인 (최대 2분 30초)
-      const maxPollingTime = 150000;
-      const pollingInterval = 2000;
-      const startTime = Date.now();
-      let errorCount = 0;
-
-      while (Date.now() - startTime < maxPollingTime) {
-        await new Promise((resolve) => setTimeout(resolve, pollingInterval));
-
-        try {
-          const statusResponse = await fetch(`/auth/login-status/${sessionId}`);
-          const statusData = await statusResponse.json();
-
-          // 에러 카운트 리셋
-          errorCount = 0;
-
-          // 라이브 뷰 URL 업데이트 (첫 폴링에서 받을 수도 있음)
-          const currentLiveViewUrl = statusData.liveViewUrl || liveViewUrl;
-
-          // 진행 상태 업데이트
-          setLoginStatus({
-            success: false,
-            message: statusData.message,
-            liveViewUrl: currentLiveViewUrl,
-          });
-
-          // 완료 확인 (성공, 실패, 타임아웃, not_found 모두 포함)
-          if (statusData.completed) {
-            loginSessionIdRef.current = null; // 세션 ID 클리어
-            setLoginStatus({
-              success: statusData.success,
-              message: statusData.message,
-            });
-            // 로그인 성공 시 savedLoginInfo 업데이트
-            if (statusData.success) {
-              setSavedLoginInfo({
-                loggedIn: true,
-                userEmail: kakaoCredentials.email,
-                savedAt: new Date().toISOString(),
-              });
-              // 로그인 성공 후 입력 필드 초기화
-              setKakaoCredentials({ email: '', password: '' });
-            }
-            return;
-          }
-
-          // 실패 상태면 즉시 중단
-          if (statusData.status === 'failed' || statusData.status === 'timeout') {
-            loginSessionIdRef.current = null; // 세션 ID 클리어
-            setLoginStatus({
-              success: false,
-              message: statusData.message,
-            });
-            return;
-          }
-        } catch (pollError) {
-          errorCount++;
-          console.error('Polling error:', pollError);
-
-          // 연속 3번 에러 시 중단
-          if (errorCount >= 3) {
-            setLoginStatus({
-              success: false,
-              message: '서버 연결 오류. 다시 시도해주세요.',
-            });
-            return;
-          }
-        }
-      }
-
-      // 타임아웃
-      setLoginStatus({
-        success: false,
-        message: '폴링 시간 초과. 다시 시도해주세요.',
-      });
-    } catch (error) {
-      let message = '서버 연결에 실패했습니다.';
-      if (error instanceof Error) {
-        message = error.message;
-      }
-      setLoginStatus({
-        success: false,
-        message,
-      });
-      console.error(error);
-    } finally {
-      setLoginLoading(false);
-    }
-  };
+  }, [user?.email]);
 
   const handleClearCookies = async () => {
-    if (!savedLoginInfo?.userEmail) {
+    if (!user?.email) {
       alert('삭제할 쿠키가 없습니다.');
       return;
     }
 
     try {
-      const response = await fetch(`/auth/cookies?email=${encodeURIComponent(savedLoginInfo.userEmail)}`, {
+      const response = await fetch(`/auth/cookies?email=${encodeURIComponent(user.email)}`, {
         method: 'DELETE',
       });
 
       const data = await response.json();
       alert(data.message);
-      // 쿠키 삭제 후 로그인 상태 초기화
-      setSavedLoginInfo({
-        loggedIn: false,
-      });
-      setLoginStatus(null);
+      setCookieStatus({ exists: false });
     } catch (error) {
       alert('쿠키 삭제에 실패했습니다.');
       console.error(error);
@@ -570,6 +340,15 @@ export default function Home() {
     }
   };
 
+  // 로딩 중이거나 로그인하지 않은 경우
+  if (isLoading || !user) {
+    return (
+      <div className="flex items-center justify-center min-h-[60vh]">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-orange-500"></div>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-8">
       {/* 안내 섹션 */}
@@ -581,140 +360,51 @@ export default function Home() {
         </p>
       </div>
 
-      {/* 티스토리 로그인 관리 */}
+      {/* 티스토리 쿠키 상태 */}
       <div className="bg-white rounded-2xl p-6 shadow-sm border border-slate-200">
         <div className="flex items-center justify-between mb-4">
           <div>
-            <h3 className="text-lg font-semibold text-slate-800">티스토리 로그인</h3>
+            <h3 className="text-lg font-semibold text-slate-800">티스토리 쿠키 상태</h3>
             <p className="text-sm text-slate-500">
-              카카오 계정으로 로그인하여 쿠키를 저장하세요.
+              티스토리 발행에 필요한 쿠키 저장 상태입니다.
             </p>
           </div>
-          <button
-            onClick={handleClearCookies}
-            className="px-4 py-2 bg-slate-200 hover:bg-slate-300 text-slate-700 rounded-lg font-medium transition-colors"
-          >
-            쿠키 삭제
-          </button>
+          {cookieStatus?.exists && (
+            <button
+              onClick={handleClearCookies}
+              className="px-4 py-2 bg-slate-200 hover:bg-slate-300 text-slate-700 rounded-lg font-medium transition-colors"
+            >
+              쿠키 삭제
+            </button>
+          )}
         </div>
 
-        {/* 카카오 로그인 입력 필드 */}
-        <div className="mb-4 p-4 bg-yellow-50 rounded-lg border border-yellow-200">
-          <div className="grid md:grid-cols-2 gap-4 mb-4">
-            <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">카카오 이메일</label>
-              <input
-                type="email"
-                value={kakaoCredentials.email}
-                onChange={(e) => setKakaoCredentials({ ...kakaoCredentials, email: e.target.value })}
-                placeholder="example@kakao.com"
-                className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-yellow-500 focus:border-transparent"
-                disabled={loginLoading}
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">비밀번호</label>
-              <input
-                type="password"
-                value={kakaoCredentials.password}
-                onChange={(e) => setKakaoCredentials({ ...kakaoCredentials, password: e.target.value })}
-                placeholder="비밀번호 입력"
-                className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-yellow-500 focus:border-transparent"
-                disabled={loginLoading}
-              />
-            </div>
-          </div>
-          <div className="flex gap-2">
-            <button
-              onClick={handleCredentialLogin}
-              disabled={loginLoading || !kakaoCredentials.email || !kakaoCredentials.password}
-              className="px-4 py-2 bg-yellow-500 hover:bg-yellow-600 disabled:bg-yellow-300 text-white rounded-lg font-medium transition-colors flex items-center gap-2"
-            >
-              {loginLoading ? (
-                <>
-                  <svg className="animate-spin h-4 w-4" viewBox="0 0 24 24">
-                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
-                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
-                  </svg>
-                  로그인 중...
-                </>
-              ) : (
-                '자동 로그인'
-              )}
-            </button>
-            <button
-              onClick={handleManualLogin}
-              disabled={loginLoading || !kakaoCredentials.email}
-              className="px-4 py-2 bg-slate-500 hover:bg-slate-600 disabled:bg-slate-300 text-white rounded-lg font-medium transition-colors"
-            >
-              수동 로그인 (2FA)
-            </button>
-          </div>
-          <p className="mt-2 text-xs text-slate-500">
-            2단계 인증을 사용 중이라면 이메일 입력 후 &apos;수동 로그인&apos; 버튼을 클릭하세요.
-          </p>
-        </div>
-
-        {/* 저장된 로그인 상태 표시 */}
-        {checkingLogin ? (
+        {checkingCookies ? (
           <div className="p-3 bg-slate-50 text-slate-500 rounded-lg flex items-center gap-2">
             <svg className="animate-spin h-4 w-4" viewBox="0 0 24 24">
               <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
               <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
             </svg>
-            로그인 상태 확인 중...
+            쿠키 상태 확인 중...
           </div>
-        ) : savedLoginInfo && (
-          <div className={`p-3 rounded-lg ${savedLoginInfo.loggedIn ? 'bg-green-50 text-green-700 border border-green-200' : 'bg-red-50 text-red-700 border border-red-200'}`}>
+        ) : cookieStatus?.exists ? (
+          <div className="p-3 rounded-lg bg-green-50 text-green-700 border border-green-200">
             <div className="flex items-center gap-2">
-              {savedLoginInfo.loggedIn ? (
-                <>
-                  <span className="text-lg">✅</span>
-                  <span className="font-medium">{savedLoginInfo.userEmail}</span>
-                  <span>로그인됨</span>
-                  {savedLoginInfo.savedAt && (
-                    <span className="text-xs text-green-600 ml-auto">
-                      ({new Date(savedLoginInfo.savedAt).toLocaleString('ko-KR')})
-                    </span>
-                  )}
-                </>
-              ) : (
-                <>
-                  <span className="text-lg">❌</span>
-                  <span>로그인 필요 - 카카오 계정으로 로그인하세요</span>
-                </>
+              <span className="text-lg">✅</span>
+              <span className="font-medium">티스토리 쿠키 저장됨</span>
+              {cookieStatus.savedAt && (
+                <span className="text-xs text-green-600 ml-auto">
+                  ({new Date(cookieStatus.savedAt).toLocaleString('ko-KR')})
+                </span>
               )}
             </div>
           </div>
-        )}
-
-        {loginStatus && (
-          <div className={`mt-3 p-3 rounded-lg ${loginStatus.success ? 'bg-green-50 text-green-700' : loginStatus.liveViewUrl ? 'bg-blue-50 text-blue-700' : 'bg-yellow-50 text-yellow-700'}`}>
+        ) : (
+          <div className="p-3 rounded-lg bg-yellow-50 text-yellow-700 border border-yellow-200">
             <div className="flex items-center gap-2">
-              {loginStatus.success ? '✅' : loginStatus.liveViewUrl ? '🌐' : '⏳'} {loginStatus.message}
+              <span className="text-lg">⚠️</span>
+              <span>티스토리 쿠키가 없습니다. 첫 발행 시 로그인이 필요합니다.</span>
             </div>
-            {loginStatus.liveViewUrl && !loginStatus.success && (
-              <div className="mt-2 pt-2 border-t border-blue-200">
-                <p className="text-sm mb-2">팝업이 차단되었다면 아래 버튼을 클릭하세요:</p>
-                <a
-                  href={loginStatus.liveViewUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="inline-flex items-center gap-2 px-4 py-2 bg-blue-500 hover:bg-blue-600 text-white rounded-lg text-sm font-medium transition-colors"
-                >
-                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
-                  </svg>
-                  라이브 뷰 열기
-                </a>
-              </div>
-            )}
-          </div>
-        )}
-
-        {loginLoading && !loginStatus?.liveViewUrl && (
-          <div className="p-3 bg-blue-50 text-blue-700 rounded-lg">
-            로컬 브라우저 창에서 카카오 로그인을 완료해주세요.
           </div>
         )}
       </div>
