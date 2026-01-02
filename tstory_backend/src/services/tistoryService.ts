@@ -159,25 +159,34 @@ async function loadCookies(page: Page, userEmail?: string): Promise<boolean> {
 /**
  * 쿠키 저장 (DB에) - 유저 이메일 기반
  */
-async function saveCookies(page: Page, userEmail?: string): Promise<void> {
+async function saveCookies(page: Page, userEmail?: string): Promise<boolean> {
   try {
     if (!userEmail) {
       console.log('No user email provided, cannot save cookies');
-      return;
+      return false;
     }
 
     const cookies = await page.cookies();
+    console.log(`Got ${cookies.length} cookies from browser for user: ${userEmail}`);
+
+    if (cookies.length === 0) {
+      console.log('WARNING: No cookies to save!');
+      return false;
+    }
+
     const cookiesJson = JSON.stringify(cookies);
 
-    await prisma.tistoryCookie.upsert({
+    const result = await prisma.tistoryCookie.upsert({
       where: { userEmail },
       update: { cookies: cookiesJson },
       create: { userEmail, cookies: cookiesJson },
     });
 
-    console.log(`Cookies saved to DB for user: ${userEmail}`);
+    console.log(`Cookies saved to DB for user: ${userEmail}, record id: ${result.id}`);
+    return true;
   } catch (error) {
     console.error('Failed to save cookies to DB:', error);
+    return false;
   }
 }
 
@@ -227,6 +236,7 @@ export async function checkCookiesExist(userEmail?: string): Promise<{ exists: b
  */
 export async function getAllAccounts(): Promise<Array<{ userEmail: string; savedAt: Date }>> {
   try {
+    console.log('[getAllAccounts] Fetching all accounts from DB...');
     const accounts = await prisma.tistoryCookie.findMany({
       select: {
         userEmail: true,
@@ -237,12 +247,14 @@ export async function getAllAccounts(): Promise<Array<{ userEmail: string; saved
       },
     });
 
+    console.log(`[getAllAccounts] Found ${accounts.length} accounts:`, accounts.map(a => a.userEmail));
+
     return accounts.map((account) => ({
       userEmail: account.userEmail,
       savedAt: account.updatedAt,
     }));
   } catch (error) {
-    console.error('Failed to get accounts:', error);
+    console.error('[getAllAccounts] Failed to get accounts:', error);
     return [];
   }
 }
@@ -1264,15 +1276,18 @@ export async function testLogin(credentials?: { email: string; password: string 
       return { success: false, message: '이메일이 필요합니다.' };
     }
 
+    console.log(`[testLogin] Starting login for: ${credentials.email}`);
+
     // Browserbase 사용 여부 확인
     useBrowserbase = config.browserbase.enabled;
 
     if (useBrowserbase) {
-      console.log('Connecting to Browserbase for auto login...');
+      console.log('[testLogin] Connecting to Browserbase for auto login...');
       const { browser: connectedBrowser } = await connectToBrowserbase();
       browser = connectedBrowser;
     } else {
       // 로컬 Puppeteer - headless 모드로 실행 (자동 로그인은 화면 불필요)
+      console.log('[testLogin] Launching local Puppeteer (headless)...');
       browser = await puppeteer.launch({
         headless: true,
         args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage'],
@@ -1285,25 +1300,39 @@ export async function testLogin(credentials?: { email: string; password: string 
     await loadCookies(page, credentials.email);
 
     const loggedIn = await isLoggedIn(page);
+    console.log(`[testLogin] Already logged in: ${loggedIn}`);
 
     if (loggedIn) {
+      // 이미 로그인된 경우에도 쿠키 갱신
+      const cookiesSaved = await saveCookies(page, credentials.email);
+      console.log(`[testLogin] Cookies refreshed: ${cookiesSaved}`);
       return { success: true, message: '이미 로그인되어 있습니다 (쿠키 유효)', userEmail: credentials.email };
     }
 
+    console.log('[testLogin] Attempting login...');
     const loginSuccess = await loginToTistory(page, credentials);
+    console.log(`[testLogin] Login result: ${loginSuccess}`);
 
     if (loginSuccess) {
       // 로그인 성공 시 쿠키 저장
-      await saveCookies(page, credentials.email);
+      const cookiesSaved = await saveCookies(page, credentials.email);
+      console.log(`[testLogin] Cookies saved after login: ${cookiesSaved}`);
+
+      if (!cookiesSaved) {
+        return { success: false, message: '로그인은 성공했으나 쿠키 저장에 실패했습니다.' };
+      }
+
       return { success: true, message: '로그인 성공!', userEmail: credentials.email };
     } else {
       return { success: false, message: '로그인 실패. 이메일/비밀번호를 확인하거나 2FA 사용 시 수동 로그인을 이용하세요.' };
     }
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+    console.error(`[testLogin] Error: ${errorMessage}`);
     return { success: false, message: errorMessage };
   } finally {
     if (browser) {
+      console.log('[testLogin] Closing browser...');
       await browser.close();
     }
   }
