@@ -1,5 +1,5 @@
 import { Router, Request, Response } from 'express';
-import { testLogin, clearCookies, manualLogin, startManualLogin, getLoginStatus, cancelLogin, checkCookiesExist } from '../services/tistoryService';
+import { testLogin, clearCookies, manualLogin, startManualLogin, getLoginStatus, cancelLogin, checkCookiesExist, getAllAccounts } from '../services/tistoryService';
 import { config } from '../config';
 
 const router = Router();
@@ -224,6 +224,26 @@ router.delete('/cookies', async (req: Request, res: Response) => {
     res.json({
       success: true,
       message: '삭제할 쿠키가 없습니다.',
+    });
+  }
+});
+
+/**
+ * 저장된 모든 티스토리 계정 목록 조회
+ * GET /auth/accounts
+ */
+router.get('/accounts', async (req: Request, res: Response) => {
+  try {
+    const accounts = await getAllAccounts();
+    res.json({
+      success: true,
+      accounts,
+    });
+  } catch (error) {
+    console.error('Get accounts error:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to get accounts',
     });
   }
 });

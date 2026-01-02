@@ -223,6 +223,31 @@ export async function checkCookiesExist(userEmail?: string): Promise<{ exists: b
 }
 
 /**
+ * 저장된 모든 계정 목록 조회
+ */
+export async function getAllAccounts(): Promise<Array<{ userEmail: string; savedAt: Date }>> {
+  try {
+    const accounts = await prisma.tistoryCookie.findMany({
+      select: {
+        userEmail: true,
+        updatedAt: true,
+      },
+      orderBy: {
+        updatedAt: 'desc',
+      },
+    });
+
+    return accounts.map((account) => ({
+      userEmail: account.userEmail,
+      savedAt: account.updatedAt,
+    }));
+  } catch (error) {
+    console.error('Failed to get accounts:', error);
+    return [];
+  }
+}
+
+/**
  * 로그인 상태 확인 (더 정확한 체크)
  */
 async function isLoggedIn(page: Page): Promise<boolean> {
