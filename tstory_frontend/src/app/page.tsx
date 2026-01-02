@@ -54,6 +54,7 @@ export default function Home() {
   const [savedLoginInfo, setSavedLoginInfo] = useState<SavedLoginInfo | null>(null);
   const [checkingLogin, setCheckingLogin] = useState(true);
   const loginSessionIdRef = useRef<string | null>(null);
+  const [kakaoCredentials, setKakaoCredentials] = useState({ email: '', password: '' });
 
   // 페이지 로드 시 로그인 상태 확인
   useEffect(() => {
@@ -106,6 +107,64 @@ export default function Home() {
       cancelLoginSession();
     };
   }, []);
+
+  // 자격 증명 기반 자동 로그인
+  const handleCredentialLogin = async () => {
+    if (!kakaoCredentials.email || !kakaoCredentials.password) {
+      setLoginStatus({
+        success: false,
+        message: '카카오 이메일과 비밀번호를 입력해주세요.',
+      });
+      return;
+    }
+
+    setLoginLoading(true);
+    setLoginStatus({ success: false, message: '로그인 중...' });
+
+    try {
+      const response = await fetch('/auth/test-login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          email: kakaoCredentials.email,
+          password: kakaoCredentials.password,
+        }),
+      });
+
+      const data = await response.json();
+
+      if (data.success) {
+        setLoginStatus({
+          success: true,
+          message: data.message || '로그인 성공!',
+        });
+        setSavedLoginInfo({
+          loggedIn: true,
+          blogName: savedLoginInfo?.blogName || '',
+          savedAt: new Date().toISOString(),
+        });
+        // 로그인 성공 후 입력 필드 초기화
+        setKakaoCredentials({ email: '', password: '' });
+      } else {
+        setLoginStatus({
+          success: false,
+          message: data.message || '로그인에 실패했습니다.',
+        });
+      }
+    } catch (error) {
+      let message = '서버 연결에 실패했습니다.';
+      if (error instanceof Error) {
+        message = error.message;
+      }
+      setLoginStatus({
+        success: false,
+        message,
+      });
+      console.error(error);
+    } finally {
+      setLoginLoading(false);
+    }
+  };
 
   const handleManualLogin = async () => {
     setLoginLoading(true);
@@ -512,13 +571,47 @@ export default function Home() {
           <div>
             <h3 className="text-lg font-semibold text-slate-800">티스토리 로그인</h3>
             <p className="text-sm text-slate-500">
-              발행 전 수동 로그인으로 쿠키를 저장하세요. (2단계 인증 지원)
+              카카오 계정으로 로그인하여 쿠키를 저장하세요.
             </p>
+          </div>
+          <button
+            onClick={handleClearCookies}
+            className="px-4 py-2 bg-slate-200 hover:bg-slate-300 text-slate-700 rounded-lg font-medium transition-colors"
+          >
+            쿠키 삭제
+          </button>
+        </div>
+
+        {/* 카카오 로그인 입력 필드 */}
+        <div className="mb-4 p-4 bg-yellow-50 rounded-lg border border-yellow-200">
+          <div className="grid md:grid-cols-2 gap-4 mb-4">
+            <div>
+              <label className="block text-sm font-medium text-slate-700 mb-1">카카오 이메일</label>
+              <input
+                type="email"
+                value={kakaoCredentials.email}
+                onChange={(e) => setKakaoCredentials({ ...kakaoCredentials, email: e.target.value })}
+                placeholder="example@kakao.com"
+                className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-yellow-500 focus:border-transparent"
+                disabled={loginLoading}
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-slate-700 mb-1">비밀번호</label>
+              <input
+                type="password"
+                value={kakaoCredentials.password}
+                onChange={(e) => setKakaoCredentials({ ...kakaoCredentials, password: e.target.value })}
+                placeholder="비밀번호 입력"
+                className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-yellow-500 focus:border-transparent"
+                disabled={loginLoading}
+              />
+            </div>
           </div>
           <div className="flex gap-2">
             <button
-              onClick={handleManualLogin}
-              disabled={loginLoading}
+              onClick={handleCredentialLogin}
+              disabled={loginLoading || !kakaoCredentials.email || !kakaoCredentials.password}
               className="px-4 py-2 bg-yellow-500 hover:bg-yellow-600 disabled:bg-yellow-300 text-white rounded-lg font-medium transition-colors flex items-center gap-2"
             >
               {loginLoading ? (
@@ -530,16 +623,20 @@ export default function Home() {
                   로그인 중...
                 </>
               ) : (
-                '카카오 로그인'
+                '자동 로그인'
               )}
             </button>
             <button
-              onClick={handleClearCookies}
-              className="px-4 py-2 bg-slate-200 hover:bg-slate-300 text-slate-700 rounded-lg font-medium transition-colors"
+              onClick={handleManualLogin}
+              disabled={loginLoading}
+              className="px-4 py-2 bg-slate-500 hover:bg-slate-600 disabled:bg-slate-300 text-white rounded-lg font-medium transition-colors"
             >
-              쿠키 삭제
+              수동 로그인 (2FA)
             </button>
           </div>
+          <p className="mt-2 text-xs text-slate-500">
+            2단계 인증을 사용 중이라면 &apos;수동 로그인&apos; 버튼을 클릭하세요.
+          </p>
         </div>
 
         {/* 저장된 로그인 상태 표시 */}

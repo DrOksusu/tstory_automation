@@ -6,12 +6,23 @@ const router = Router();
 
 /**
  * 로그인 테스트 (브라우저 창이 열림)
- * GET /auth/test-login
+ * POST /auth/test-login
+ * Body: { email: string, password: string }
  */
-router.get('/test-login', async (req: Request, res: Response) => {
+router.post('/test-login', async (req: Request, res: Response) => {
   try {
-    console.log('Starting login test...');
-    const result = await testLogin();
+    const { email, password } = req.body;
+
+    if (!email || !password) {
+      res.status(400).json({
+        success: false,
+        message: '이메일과 비밀번호를 입력해주세요.',
+      });
+      return;
+    }
+
+    console.log('Starting login test with provided credentials...');
+    const result = await testLogin({ email, password });
 
     if (result.success) {
       res.json({
@@ -23,7 +34,7 @@ router.get('/test-login', async (req: Request, res: Response) => {
       res.status(401).json({
         success: false,
         message: result.message,
-        hint: '.env 파일의 KAKAO_EMAIL, KAKAO_PASSWORD를 확인하세요.',
+        hint: '카카오 이메일과 비밀번호를 확인하세요.',
       });
     }
   } catch (error) {

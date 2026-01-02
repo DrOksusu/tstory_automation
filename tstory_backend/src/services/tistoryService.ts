@@ -251,7 +251,10 @@ async function isLoggedIn(page: Page): Promise<boolean> {
 /**
  * 카카오 계정으로 티스토리 로그인
  */
-async function loginToTistory(page: Page): Promise<boolean> {
+async function loginToTistory(page: Page, credentials?: { email: string; password: string }): Promise<boolean> {
+  // 인자로 받은 credentials가 없으면 config에서 가져옴
+  const email = credentials?.email || config.kakao.email;
+  const password = credentials?.password || config.kakao.password;
   try {
     console.log('Navigating to Tistory login page...');
 
@@ -322,7 +325,7 @@ async function loginToTistory(page: Page): Promise<boolean> {
         const input = await page.$(selector);
         if (input) {
           await input.click();
-          await input.type(config.kakao.email, { delay: 50 });
+          await input.type(email, { delay: 50 });
           emailEntered = true;
           console.log(`Email entered using: ${selector}`);
           break;
@@ -345,7 +348,7 @@ async function loginToTistory(page: Page): Promise<boolean> {
         const input = await page.$(selector);
         if (input) {
           await input.click();
-          await input.type(config.kakao.password, { delay: 50 });
+          await input.type(password, { delay: 50 });
           console.log(`Password entered using: ${selector}`);
           break;
         }
@@ -1212,7 +1215,7 @@ export async function publishToTistory(params: {
 /**
  * 로그인 테스트
  */
-export async function testLogin(): Promise<{ success: boolean; message: string }> {
+export async function testLogin(credentials?: { email: string; password: string }): Promise<{ success: boolean; message: string }> {
   let browser: Browser | null = null;
 
   try {
@@ -1232,7 +1235,7 @@ export async function testLogin(): Promise<{ success: boolean; message: string }
       return { success: true, message: 'Already logged in (cookies valid)' };
     }
 
-    const loginSuccess = await loginToTistory(page);
+    const loginSuccess = await loginToTistory(page, credentials);
 
     if (loginSuccess) {
       return { success: true, message: 'Login successful' };

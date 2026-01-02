@@ -96,12 +96,24 @@ export default function PreviewModal({ data, onClose, onPublish }: PreviewModalP
 
     // 현재 선택된 이미지를 로컬 변수로 저장 (클로저에서 사용)
     const targetImage = selectedImage.element;
-    if (!targetImage) return;
+
+    console.log('=== RESIZE START ===');
+    console.log('corner:', corner);
+    console.log('targetImage:', targetImage);
+    console.log('selectedImage.element:', selectedImage.element);
+
+    if (!targetImage) {
+      console.log('ERROR: No target image!');
+      return;
+    }
 
     const startX = e.clientX;
     const startY = e.clientY;
     const startWidth = targetImage.offsetWidth;
     const startHeight = targetImage.offsetHeight;
+
+    console.log('startX:', startX, 'startY:', startY);
+    console.log('startWidth:', startWidth, 'startHeight:', startHeight);
 
     const handleMouseMove = (moveEvent: globalThis.MouseEvent) => {
       const deltaX = moveEvent.clientX - startX;
@@ -136,6 +148,8 @@ export default function PreviewModal({ data, onClose, onPublish }: PreviewModalP
         newWidth = Math.max(50, startWidth + diagonalDelta * sign);
       }
 
+      console.log('RESIZE MOVE - deltaX:', deltaX, 'deltaY:', deltaY, 'newWidth:', newWidth);
+
       targetImage.style.width = `${newWidth}px`;
       targetImage.style.height = 'auto';
 
@@ -144,6 +158,8 @@ export default function PreviewModal({ data, onClose, onPublish }: PreviewModalP
     };
 
     const handleMouseUp = () => {
+      console.log('=== RESIZE END ===');
+
       // state 업데이트
       if (contentRef.current) {
         setEditedData(prev => ({
@@ -158,6 +174,7 @@ export default function PreviewModal({ data, onClose, onPublish }: PreviewModalP
 
     document.addEventListener('mousemove', handleMouseMove);
     document.addEventListener('mouseup', handleMouseUp);
+    console.log('Event listeners added');
   };
 
   // 이미지 삭제
