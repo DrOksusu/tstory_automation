@@ -28,6 +28,7 @@ router.post('/test-login', async (req: Request, res: Response) => {
       res.json({
         success: true,
         message: result.message,
+        userEmail: result.userEmail,
         info: '쿠키가 저장되었습니다. 이후 발행 시 자동 로그인됩니다.',
       });
     } else {
@@ -84,12 +85,23 @@ router.get('/manual-login', async (req: Request, res: Response) => {
 /**
  * 수동 로그인 시작 (폴링 방식 + Browserless 라이브 뷰)
  * POST /auth/start-login
+ * Body: { email?: string } - 이메일을 제공하면 해당 유저로 쿠키 저장
  * 브라우저가 열리고 즉시 세션 ID와 라이브 뷰 URL 반환
  */
 router.post('/start-login', async (req: Request, res: Response) => {
   try {
-    console.log('Starting manual login (polling mode)...');
-    const { sessionId, liveViewUrl } = await startManualLogin();
+    const { email } = req.body;
+
+    if (!email) {
+      res.status(400).json({
+        success: false,
+        message: '이메일을 입력해주세요. 수동 로그인에도 이메일이 필요합니다.',
+      });
+      return;
+    }
+
+    console.log(`Starting manual login (polling mode) for user: ${email}...`);
+    const { sessionId, liveViewUrl } = await startManualLogin(email);
 
     res.json({
       success: true,
@@ -160,19 +172,20 @@ router.get('/login-session/:sessionId', async (req: Request, res: Response) => {
 });
 
 /**
- * 로그인 상태 확인 (쿠키 존재 여부)
- * GET /auth/check-login
+ * 로그인 상태 확인 (쿠키 존재 여부) - 유저 이메일 기반
+ * GET /auth/check-login?email=user@example.com
  */
 router.get('/check-login', async (req: Request, res: Response) => {
   try {
-    const result = await checkCookiesExist();
+    const userEmail = req.query.email as string | undefined;
+    const result = await checkCookiesExist(userEmail);
     res.json({
       success: true,
       loggedIn: result.exists,
-      blogName: result.blogName,
+      userEmail: result.userEmail,
       savedAt: result.savedAt,
       message: result.exists
-        ? `${result.blogName} 블로그에 로그인되어 있습니다.`
+        ? `${result.userEmail} 계정으로 로그인되어 있습니다.`
         : '로그인이 필요합니다.',
     });
   } catch (error) {
@@ -186,16 +199,26 @@ router.get('/check-login', async (req: Request, res: Response) => {
 });
 
 /**
- * 저장된 쿠키(세션) 삭제
- * DELETE /auth/cookies
+ * 저장된 쿠키(세션) 삭제 - 유저 이메일 기반
+ * DELETE /auth/cookies?email=user@example.com
  */
 router.delete('/cookies', async (req: Request, res: Response) => {
-  const cleared = await clearCookies();
+  const userEmail = req.query.email as string | undefined;
+
+  if (!userEmail) {
+    res.status(400).json({
+      success: false,
+      message: '이메일을 지정해주세요.',
+    });
+    return;
+  }
+
+  const cleared = await clearCookies(userEmail);
 
   if (cleared) {
     res.json({
       success: true,
-      message: '쿠키가 삭제되었습니다. 다음 발행 시 다시 로그인됩니다.',
+      message: `${userEmail} 계정의 쿠키가 삭제되었습니다.`,
     });
   } else {
     res.json({

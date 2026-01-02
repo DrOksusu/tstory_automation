@@ -27,7 +27,7 @@ interface LoginStatus {
 
 interface SavedLoginInfo {
   loggedIn: boolean;
-  blogName: string;
+  userEmail?: string;
   savedAt?: string;
 }
 
@@ -64,12 +64,12 @@ export default function Home() {
         const data = await response.json();
         setSavedLoginInfo({
           loggedIn: data.loggedIn,
-          blogName: data.blogName,
+          userEmail: data.userEmail,
           savedAt: data.savedAt,
         });
       } catch (error) {
         console.error('Failed to check login status:', error);
-        setSavedLoginInfo({ loggedIn: false, blogName: '' });
+        setSavedLoginInfo({ loggedIn: false });
       } finally {
         setCheckingLogin(false);
       }
@@ -140,7 +140,7 @@ export default function Home() {
         });
         setSavedLoginInfo({
           loggedIn: true,
-          blogName: savedLoginInfo?.blogName || '',
+          userEmail: data.userEmail || kakaoCredentials.email,
           savedAt: new Date().toISOString(),
         });
         // 로그인 성공 후 입력 필드 초기화
@@ -167,18 +167,28 @@ export default function Home() {
   };
 
   const handleManualLogin = async () => {
+    if (!kakaoCredentials.email) {
+      setLoginStatus({
+        success: false,
+        message: '수동 로그인도 이메일 입력이 필요합니다.',
+      });
+      return;
+    }
+
     setLoginLoading(true);
     setLoginStatus(null);
 
     try {
-      // 1. 로그인 세션 시작
+      // 1. 로그인 세션 시작 (이메일과 함께)
       const startResponse = await fetch('/auth/start-login', {
         method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: kakaoCredentials.email }),
       });
 
       if (!startResponse.ok) {
         const errorData = await startResponse.json();
-        throw new Error(errorData.error || '로그인 시작에 실패했습니다.');
+        throw new Error(errorData.message || errorData.error || '로그인 시작에 실패했습니다.');
       }
 
       const startData = await startResponse.json();
@@ -244,9 +254,11 @@ export default function Home() {
             if (statusData.success) {
               setSavedLoginInfo({
                 loggedIn: true,
-                blogName: savedLoginInfo?.blogName || '',
+                userEmail: kakaoCredentials.email,
                 savedAt: new Date().toISOString(),
               });
+              // 로그인 성공 후 입력 필드 초기화
+              setKakaoCredentials({ email: '', password: '' });
             }
             return;
           }
@@ -296,8 +308,13 @@ export default function Home() {
   };
 
   const handleClearCookies = async () => {
+    if (!savedLoginInfo?.userEmail) {
+      alert('삭제할 쿠키가 없습니다.');
+      return;
+    }
+
     try {
-      const response = await fetch('/auth/cookies', {
+      const response = await fetch(`/auth/cookies?email=${encodeURIComponent(savedLoginInfo.userEmail)}`, {
         method: 'DELETE',
       });
 
@@ -306,7 +323,6 @@ export default function Home() {
       // 쿠키 삭제 후 로그인 상태 초기화
       setSavedLoginInfo({
         loggedIn: false,
-        blogName: savedLoginInfo?.blogName || '',
       });
       setLoginStatus(null);
     } catch (error) {
@@ -628,14 +644,14 @@ export default function Home() {
             </button>
             <button
               onClick={handleManualLogin}
-              disabled={loginLoading}
+              disabled={loginLoading || !kakaoCredentials.email}
               className="px-4 py-2 bg-slate-500 hover:bg-slate-600 disabled:bg-slate-300 text-white rounded-lg font-medium transition-colors"
             >
               수동 로그인 (2FA)
             </button>
           </div>
           <p className="mt-2 text-xs text-slate-500">
-            2단계 인증을 사용 중이라면 &apos;수동 로그인&apos; 버튼을 클릭하세요.
+            2단계 인증을 사용 중이라면 이메일 입력 후 &apos;수동 로그인&apos; 버튼을 클릭하세요.
           </p>
         </div>
 
@@ -654,7 +670,7 @@ export default function Home() {
               {savedLoginInfo.loggedIn ? (
                 <>
                   <span className="text-lg">✅</span>
-                  <span className="font-medium">{savedLoginInfo.blogName}.tistory.com</span>
+                  <span className="font-medium">{savedLoginInfo.userEmail}</span>
                   <span>로그인됨</span>
                   {savedLoginInfo.savedAt && (
                     <span className="text-xs text-green-600 ml-auto">
@@ -665,7 +681,7 @@ export default function Home() {
               ) : (
                 <>
                   <span className="text-lg">❌</span>
-                  <span>로그인 필요 - 카카오 로그인 버튼을 클릭하세요</span>
+                  <span>로그인 필요 - 카카오 계정으로 로그인하세요</span>
                 </>
               )}
             </div>

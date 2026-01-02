@@ -34,10 +34,10 @@ model PromptTemplate {
   updatedAt DateTime @updatedAt
 }
 
-// 티스토리 로그인 쿠키 저장
+// 티스토리 로그인 쿠키 저장 (유저별 분리)
 model TistoryCookie {
   id        Int      @id @default(autoincrement())
-  blogName  String   @unique @db.VarChar(100) // 블로그 이름 (고유키)
+  userEmail String   @unique @db.VarChar(255) // 카카오 이메일 (고유키)
   cookies   String   @db.LongText // JSON 형식 쿠키 데이터
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt

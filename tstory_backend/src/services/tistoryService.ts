@@ -118,15 +118,20 @@ async function handleContinueWritingPopup(page: Page): Promise<void> {
 }
 
 /**
- * 저장된 쿠키 로드 (DB에서)
+ * 저장된 쿠키 로드 (DB에서) - 유저 이메일 기반
  */
-async function loadCookies(page: Page): Promise<boolean> {
+async function loadCookies(page: Page, userEmail?: string): Promise<boolean> {
   try {
-    const blogName = config.tistory.blogName;
-    console.log(`Loading cookies from database for blog: ${blogName}...`);
+    // userEmail이 없으면 쿠키 로드 불가
+    if (!userEmail) {
+      console.log('No user email provided, cannot load cookies');
+      return false;
+    }
+
+    console.log(`Loading cookies from database for user: ${userEmail}...`);
 
     const cookieRecord = await prisma.tistoryCookie.findUnique({
-      where: { blogName },
+      where: { userEmail },
     });
 
     if (cookieRecord) {
@@ -143,7 +148,7 @@ async function loadCookies(page: Page): Promise<boolean> {
       console.log('Cookies loaded successfully from DB');
       return true;
     } else {
-      console.log('No cookies found in database');
+      console.log('No cookies found in database for this user');
     }
   } catch (error) {
     console.error('Failed to load cookies from DB:', error);
@@ -152,34 +157,51 @@ async function loadCookies(page: Page): Promise<boolean> {
 }
 
 /**
- * 쿠키 저장 (DB에)
+ * 쿠키 저장 (DB에) - 유저 이메일 기반
  */
-async function saveCookies(page: Page): Promise<void> {
+async function saveCookies(page: Page, userEmail?: string): Promise<void> {
   try {
+    if (!userEmail) {
+      console.log('No user email provided, cannot save cookies');
+      return;
+    }
+
     const cookies = await page.cookies();
-    const blogName = config.tistory.blogName;
     const cookiesJson = JSON.stringify(cookies);
 
     await prisma.tistoryCookie.upsert({
-      where: { blogName },
+      where: { userEmail },
       update: { cookies: cookiesJson },
-      create: { blogName, cookies: cookiesJson },
+      create: { userEmail, cookies: cookiesJson },
     });
 
-    console.log(`Cookies saved to DB for blog: ${blogName}`);
+    console.log(`Cookies saved to DB for user: ${userEmail}`);
   } catch (error) {
     console.error('Failed to save cookies to DB:', error);
   }
 }
 
 /**
- * 저장된 쿠키 존재 여부 확인 (DB)
+ * 저장된 쿠키 존재 여부 확인 (DB) - 유저 이메일 기반
  */
-export async function checkCookiesExist(): Promise<{ exists: boolean; blogName: string; savedAt?: Date }> {
+export async function checkCookiesExist(userEmail?: string): Promise<{ exists: boolean; userEmail?: string; savedAt?: Date }> {
   try {
-    const blogName = config.tistory.blogName;
+    if (!userEmail) {
+      console.log('No user email provided, checking all cookies...');
+      // 이메일이 없으면 저장된 쿠키가 있는지만 확인
+      const anyCookie = await prisma.tistoryCookie.findFirst();
+      if (anyCookie) {
+        return {
+          exists: true,
+          userEmail: anyCookie.userEmail,
+          savedAt: anyCookie.updatedAt,
+        };
+      }
+      return { exists: false };
+    }
+
     const savedCookie = await prisma.tistoryCookie.findUnique({
-      where: { blogName },
+      where: { userEmail },
     });
 
     if (savedCookie && savedCookie.cookies) {
@@ -187,16 +209,16 @@ export async function checkCookiesExist(): Promise<{ exists: boolean; blogName: 
       if (Array.isArray(cookies) && cookies.length > 0) {
         return {
           exists: true,
-          blogName,
+          userEmail,
           savedAt: savedCookie.updatedAt,
         };
       }
     }
 
-    return { exists: false, blogName };
+    return { exists: false, userEmail };
   } catch (error) {
     console.error('Failed to check cookies:', error);
-    return { exists: false, blogName: config.tistory.blogName };
+    return { exists: false, userEmail };
   }
 }
 
@@ -390,7 +412,7 @@ async function loginToTistory(page: Page, credentials?: { email: string; passwor
 
     if (currentUrl.includes('tistory.com') && !currentUrl.includes('login')) {
       console.log('Login successful!');
-      await saveCookies(page);
+      await saveCookies(page, email);
       return true;
     }
 
@@ -410,7 +432,7 @@ async function loginToTistory(page: Page, credentials?: { email: string; passwor
     console.log(`Final URL: ${finalUrl}`);
 
     if (finalUrl.includes('tistory.com') && !finalUrl.includes('login')) {
-      await saveCookies(page);
+      await saveCookies(page, email);
       return true;
     }
 
@@ -497,12 +519,7 @@ export async function publishToTistory(params: {
 
       // Browserbase 환경에서는 자동 로그인 불가 (2FA 필요)
       if (config.browserbase.enabled) {
-        // 저장된 쿠키 삭제 (만료된 쿠키)
-        await prisma.tistoryCookie.deleteMany({
-          where: { blogName: config.tistory.blogName }
-        });
-        console.log('Expired cookies deleted from DB');
-
+        console.log('Session expired - user needs to re-login');
         throw new Error('로그인이 만료되었습니다. 프론트엔드에서 "카카오 로그인" 버튼을 클릭하여 다시 로그인해주세요.');
       }
 
@@ -556,12 +573,9 @@ export async function publishToTistory(params: {
                          currentUrl === `https://${config.tistory.blogName}.tistory.com`;
 
       if (isLoginPage || isBlogHome) {
-        // Browserbase 환경에서는 만료된 쿠키 삭제 후 에러 반환
+        // Browserbase 환경에서는 에러 반환
         if (config.browserbase.enabled) {
-          await prisma.tistoryCookie.deleteMany({
-            where: { blogName: config.tistory.blogName }
-          });
-          console.log('Expired cookies deleted from DB');
+          console.log('Session expired - user needs to re-login');
           throw new Error('로그인이 만료되었습니다. 프론트엔드에서 "카카오 로그인" 버튼을 클릭하여 다시 로그인해주세요.');
         }
       }
@@ -1213,12 +1227,16 @@ export async function publishToTistory(params: {
 }
 
 /**
- * 로그인 테스트
+ * 로그인 테스트 - 유저 이메일 기반
  */
-export async function testLogin(credentials?: { email: string; password: string }): Promise<{ success: boolean; message: string }> {
+export async function testLogin(credentials?: { email: string; password: string }): Promise<{ success: boolean; message: string; userEmail?: string }> {
   let browser: Browser | null = null;
 
   try {
+    if (!credentials?.email) {
+      return { success: false, message: '이메일이 필요합니다.' };
+    }
+
     browser = await puppeteer.launch({
       headless: false, // 로그인 테스트는 화면을 보여줌
       args: ['--no-sandbox', '--disable-setuid-sandbox'],
@@ -1227,18 +1245,18 @@ export async function testLogin(credentials?: { email: string; password: string 
     const page = await browser.newPage();
     await page.setViewport({ width: 1280, height: 720 });
 
-    await loadCookies(page);
+    await loadCookies(page, credentials.email);
 
     const loggedIn = await isLoggedIn(page);
 
     if (loggedIn) {
-      return { success: true, message: 'Already logged in (cookies valid)' };
+      return { success: true, message: 'Already logged in (cookies valid)', userEmail: credentials.email };
     }
 
     const loginSuccess = await loginToTistory(page, credentials);
 
     if (loginSuccess) {
-      return { success: true, message: 'Login successful' };
+      return { success: true, message: 'Login successful', userEmail: credentials.email };
     } else {
       return { success: false, message: 'Login failed' };
     }
@@ -1365,6 +1383,7 @@ interface LoginSession {
   startedAt: number;
   liveViewUrl?: string; // Browserbase 라이브 뷰 URL
   browserbaseSessionId?: string; // Browserbase 세션 ID
+  userEmail?: string; // 로그인 유저 이메일
 }
 
 // 활성 로그인 세션 저장소
@@ -1429,8 +1448,9 @@ async function connectToBrowserbase(): Promise<{ browser: Browser; liveViewUrl: 
 
 /**
  * 수동 로그인 시작 (폴링 방식) - 즉시 세션 ID와 라이브 뷰 URL 반환
+ * userEmail: 수동 로그인 시 쿠키를 저장할 유저 이메일 (옵션)
  */
-export async function startManualLogin(): Promise<{ sessionId: string; liveViewUrl?: string }> {
+export async function startManualLogin(userEmail?: string): Promise<{ sessionId: string; liveViewUrl?: string }> {
   // 기존 세션들 모두 취소
   console.log(`Cancelling ${loginSessions.size} existing login sessions...`);
   for (const [existingSessionId, existingSession] of loginSessions.entries()) {
@@ -1444,18 +1464,6 @@ export async function startManualLogin(): Promise<{ sessionId: string; liveViewU
     loginSessions.delete(existingSessionId);
   }
 
-  // 기존 쿠키 삭제 (새 로그인을 위해 깨끗하게 시작)
-  const blogName = config.tistory.blogName;
-  console.log(`Deleting existing cookies for blog: ${blogName}...`);
-  try {
-    await prisma.tistoryCookie.deleteMany({
-      where: { blogName }
-    });
-    console.log('Existing cookies deleted');
-  } catch (e) {
-    console.log('No existing cookies to delete or error:', e);
-  }
-
   const sessionId = generateSessionId();
 
   const session: LoginSession = {
@@ -1464,6 +1472,7 @@ export async function startManualLogin(): Promise<{ sessionId: string; liveViewU
     message: '브라우저를 시작하는 중...',
     browser: null,
     startedAt: Date.now(),
+    userEmail,
   };
 
   loginSessions.set(sessionId, session);
@@ -1645,23 +1654,29 @@ async function runLoginProcess(sessionId: string): Promise<void> {
 
     if (loginDetected) {
       session.message = '쿠키 저장 중...';
-      console.log(`[${sessionId}] Saving cookies...`);
-      await saveCookies(page);
+      console.log(`[${sessionId}] Saving cookies for user: ${session.userEmail}...`);
 
-      // 블로그 페이지로 이동해서 추가 쿠키 획득
-      try {
-        await page.goto(`https://${config.tistory.blogName}.tistory.com`, {
-          waitUntil: 'domcontentloaded',
-          timeout: 30000
-        });
-        await delay(2000);
-        await saveCookies(page);
-      } catch (e) {
-        console.log(`[${sessionId}] Blog page navigation skipped`);
+      if (session.userEmail) {
+        await saveCookies(page, session.userEmail);
+
+        // 블로그 페이지로 이동해서 추가 쿠키 획득
+        try {
+          await page.goto(`https://${config.tistory.blogName}.tistory.com`, {
+            waitUntil: 'domcontentloaded',
+            timeout: 30000
+          });
+          await delay(2000);
+          await saveCookies(page, session.userEmail);
+        } catch (e) {
+          console.log(`[${sessionId}] Blog page navigation skipped`);
+        }
+
+        session.status = 'success';
+        session.message = '로그인 성공! 쿠키가 저장되었습니다.';
+      } else {
+        session.status = 'failed';
+        session.message = '이메일 정보가 없어 쿠키를 저장할 수 없습니다.';
       }
-
-      session.status = 'success';
-      session.message = '로그인 성공! 쿠키가 저장되었습니다.';
     } else {
       session.status = 'timeout';
       session.message = '로그인 시간 초과 (2분). 다시 시도해주세요.';
@@ -1769,23 +1784,29 @@ async function runBrowserbaseLoginProcess(sessionId: string): Promise<void> {
 
     if (loginDetected) {
       session.message = '쿠키 저장 중...';
-      console.log(`[${sessionId}] Saving cookies...`);
-      await saveCookies(page);
+      console.log(`[${sessionId}] Saving cookies for user: ${session.userEmail}...`);
 
-      // 블로그 페이지로 이동해서 추가 쿠키 획득
-      try {
-        await page.goto(`https://${config.tistory.blogName}.tistory.com`, {
-          waitUntil: 'domcontentloaded',
-          timeout: 30000
-        });
-        await delay(2000);
-        await saveCookies(page);
-      } catch (e) {
-        console.log(`[${sessionId}] Blog page navigation skipped`);
+      if (session.userEmail) {
+        await saveCookies(page, session.userEmail);
+
+        // 블로그 페이지로 이동해서 추가 쿠키 획득
+        try {
+          await page.goto(`https://${config.tistory.blogName}.tistory.com`, {
+            waitUntil: 'domcontentloaded',
+            timeout: 30000
+          });
+          await delay(2000);
+          await saveCookies(page, session.userEmail);
+        } catch (e) {
+          console.log(`[${sessionId}] Blog page navigation skipped`);
+        }
+
+        session.status = 'success';
+        session.message = '로그인 성공! 쿠키가 저장되었습니다.';
+      } else {
+        session.status = 'failed';
+        session.message = '이메일 정보가 없어 쿠키를 저장할 수 없습니다.';
       }
-
-      session.status = 'success';
-      session.message = '로그인 성공! 쿠키가 저장되었습니다.';
     } else {
       session.status = 'timeout';
       session.message = '로그인 시간 초과 (2분). 다시 시도해주세요.';
@@ -1814,16 +1835,20 @@ async function runBrowserbaseLoginProcess(sessionId: string): Promise<void> {
 }
 
 /**
- * 저장된 쿠키 삭제
+ * 저장된 쿠키 삭제 - 유저 이메일 기반
  */
-export async function clearCookies(): Promise<boolean> {
+export async function clearCookies(userEmail?: string): Promise<boolean> {
   try {
-    const blogName = config.tistory.blogName;
+    if (!userEmail) {
+      console.log('No user email provided, cannot clear cookies');
+      return false;
+    }
+
     const result = await prisma.tistoryCookie.deleteMany({
-      where: { blogName },
+      where: { userEmail },
     });
     if (result.count > 0) {
-      console.log(`Cookies cleared for blog: ${blogName}`);
+      console.log(`Cookies cleared for user: ${userEmail}`);
       return true;
     }
     return false;
