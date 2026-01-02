@@ -1232,16 +1232,27 @@ export async function publishToTistory(params: {
  */
 export async function testLogin(credentials?: { email: string; password: string }): Promise<{ success: boolean; message: string; userEmail?: string }> {
   let browser: Browser | null = null;
+  let useBrowserbase = false;
 
   try {
     if (!credentials?.email) {
       return { success: false, message: '이메일이 필요합니다.' };
     }
 
-    browser = await puppeteer.launch({
-      headless: false, // 로그인 테스트는 화면을 보여줌
-      args: ['--no-sandbox', '--disable-setuid-sandbox'],
-    });
+    // Browserbase 사용 여부 확인
+    useBrowserbase = config.browserbase.enabled;
+
+    if (useBrowserbase) {
+      console.log('Connecting to Browserbase for auto login...');
+      const { browser: connectedBrowser } = await connectToBrowserbase();
+      browser = connectedBrowser;
+    } else {
+      // 로컬 Puppeteer - headless 모드로 실행 (자동 로그인은 화면 불필요)
+      browser = await puppeteer.launch({
+        headless: true,
+        args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage'],
+      });
+    }
 
     const page = await browser.newPage();
     await page.setViewport({ width: 1280, height: 720 });
@@ -1251,15 +1262,17 @@ export async function testLogin(credentials?: { email: string; password: string 
     const loggedIn = await isLoggedIn(page);
 
     if (loggedIn) {
-      return { success: true, message: 'Already logged in (cookies valid)', userEmail: credentials.email };
+      return { success: true, message: '이미 로그인되어 있습니다 (쿠키 유효)', userEmail: credentials.email };
     }
 
     const loginSuccess = await loginToTistory(page, credentials);
 
     if (loginSuccess) {
-      return { success: true, message: 'Login successful', userEmail: credentials.email };
+      // 로그인 성공 시 쿠키 저장
+      await saveCookies(page, credentials.email);
+      return { success: true, message: '로그인 성공!', userEmail: credentials.email };
     } else {
-      return { success: false, message: 'Login failed' };
+      return { success: false, message: '로그인 실패. 이메일/비밀번호를 확인하거나 2FA 사용 시 수동 로그인을 이용하세요.' };
     }
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : 'Unknown error';
