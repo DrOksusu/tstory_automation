@@ -1685,9 +1685,9 @@ async function runLoginProcess(sessionId: string): Promise<void> {
     session.message = '카카오 로그인을 완료해주세요...';
     console.log(`[${sessionId}] Waiting for login to complete...`);
 
-    // 로그인 완료 대기 (최대 2분)
+    // 로그인 완료 대기 (최대 3분)
     let loginDetected = false;
-    const maxWaitTime = 120000; // 2분
+    const maxWaitTime = 180000; // 3분 (2FA 고려)
     const startTime = Date.now();
 
     while (!loginDetected && (Date.now() - startTime) < maxWaitTime) {
@@ -1703,13 +1703,19 @@ async function runLoginProcess(sessionId: string): Promise<void> {
         const currentUrl = page.url();
         console.log(`[${sessionId}] Current URL: ${currentUrl}`);
 
-        const isLoggedIn = currentUrl.includes('tistory.com') &&
-          !currentUrl.includes('login') &&
-          !currentUrl.includes('auth') &&
-          !currentUrl.includes('kakao') &&
-          !currentUrl.includes('error');
+        // 로그인 성공 조건 확인 (더 유연하게)
+        const isTistoryMainPage = currentUrl === 'https://www.tistory.com/' ||
+                                   currentUrl === 'https://www.tistory.com';
+        const isBlogPage = currentUrl.includes('.tistory.com') &&
+                           !currentUrl.includes('auth/login') &&
+                           !currentUrl.includes('accounts.kakao.com');
+        const isManagePage = currentUrl.includes('/manage');
 
-        if (isLoggedIn) {
+        const isOnKakaoLogin = currentUrl.includes('accounts.kakao.com');
+        const isOnTistoryLogin = currentUrl.includes('tistory.com/auth/login');
+
+        // 로그인 페이지가 아니고 티스토리 페이지에 있으면 로그인 성공
+        if ((isTistoryMainPage || isBlogPage || isManagePage) && !isOnKakaoLogin && !isOnTistoryLogin) {
           loginDetected = true;
           console.log(`[${sessionId}] Login detected!`);
           break;
@@ -1816,9 +1822,9 @@ async function runBrowserbaseLoginProcess(sessionId: string): Promise<void> {
     session.message = '라이브 뷰에서 카카오 로그인을 완료해주세요...';
     console.log(`[${sessionId}] Waiting for user to complete login in live view...`);
 
-    // 로그인 완료 대기 (최대 2분)
+    // 로그인 완료 대기 (최대 3분)
     let loginDetected = false;
-    const maxWaitTime = 120000; // 2분
+    const maxWaitTime = 180000; // 3분 (2FA 고려)
     const startTime = Date.now();
 
     while (!loginDetected && (Date.now() - startTime) < maxWaitTime) {
@@ -1834,16 +1840,53 @@ async function runBrowserbaseLoginProcess(sessionId: string): Promise<void> {
         const currentUrl = page.url();
         console.log(`[${sessionId}] Current URL: ${currentUrl}`);
 
-        const isLoggedIn = currentUrl.includes('tistory.com') &&
-          !currentUrl.includes('login') &&
-          !currentUrl.includes('auth') &&
-          !currentUrl.includes('kakao') &&
-          !currentUrl.includes('error');
+        // 로그인 성공 조건 확인 (더 유연하게)
+        // 1. 티스토리 메인 페이지
+        // 2. 블로그 관리 페이지
+        // 3. 블로그 홈
+        const isTistoryMainPage = currentUrl === 'https://www.tistory.com/' ||
+                                   currentUrl === 'https://www.tistory.com';
+        const isBlogPage = currentUrl.includes('.tistory.com') &&
+                           !currentUrl.includes('auth/login') &&
+                           !currentUrl.includes('accounts.kakao.com');
+        const isManagePage = currentUrl.includes('/manage');
 
-        if (isLoggedIn) {
-          loginDetected = true;
-          console.log(`[${sessionId}] Login detected!`);
-          break;
+        // Kakao 로그인 페이지가 아니고 Tistory 관련 페이지인지 확인
+        const isOnKakaoLogin = currentUrl.includes('accounts.kakao.com');
+        const isOnTistoryLogin = currentUrl.includes('tistory.com/auth/login');
+
+        console.log(`[${sessionId}] Check - isTistoryMain: ${isTistoryMainPage}, isBlog: ${isBlogPage}, isManage: ${isManagePage}, isKakao: ${isOnKakaoLogin}, isTistoryLogin: ${isOnTistoryLogin}`);
+
+        // 로그인 페이지가 아니고 티스토리 페이지에 있으면 로그인 성공
+        if ((isTistoryMainPage || isBlogPage || isManagePage) && !isOnKakaoLogin && !isOnTistoryLogin) {
+          // 추가 확인: 페이지에서 로그인 상태 체크
+          const hasLoggedInIndicator = await page.evaluate(() => {
+            // 로그인된 상태의 표시자 확인
+            const logoutBtn = document.querySelector('a[href*="logout"], button[class*="logout"], .btn_logout');
+            const profileArea = document.querySelector('.profile, .user-info, .thumb_info, [class*="profile"]');
+            const manageBtn = document.querySelector('a[href*="manage"], .link_manage');
+            return !!(logoutBtn || profileArea || manageBtn);
+          }).catch(() => false);
+
+          console.log(`[${sessionId}] Has logged in indicator: ${hasLoggedInIndicator}`);
+
+          if (hasLoggedInIndicator || isManagePage) {
+            loginDetected = true;
+            console.log(`[${sessionId}] Login detected!`);
+            break;
+          }
+
+          // 티스토리 메인이나 블로그 페이지에 있으면 일단 성공으로 처리
+          if (isTistoryMainPage || isBlogPage) {
+            // 한번 더 대기 후 최종 확인
+            await delay(2000);
+            const finalUrl = page.url();
+            if (!finalUrl.includes('accounts.kakao.com') && !finalUrl.includes('auth/login')) {
+              loginDetected = true;
+              console.log(`[${sessionId}] Login detected (on Tistory page)!`);
+              break;
+            }
+          }
         }
       } catch (e) {
         console.log(`[${sessionId}] Page check error:`, e);

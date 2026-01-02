@@ -187,8 +187,8 @@ export default function Home() {
         setAddAccountStatus({ message: '브라우저에서 로그인을 완료해주세요.' });
       }
 
-      // 폴링
-      const maxPollingTime = 150000;
+      // 폴링 (3분 + 여유시간)
+      const maxPollingTime = 200000;
       const pollingInterval = 2000;
       const startTime = Date.now();
 
