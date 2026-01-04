@@ -162,30 +162,44 @@ async function loadCookies(page: Page, userEmail?: string): Promise<boolean> {
 async function saveCookies(page: Page, userEmail?: string): Promise<boolean> {
   try {
     if (!userEmail) {
-      console.log('No user email provided, cannot save cookies');
+      console.log('[saveCookies] No user email provided, cannot save cookies');
       return false;
     }
 
+    console.log(`[saveCookies] Getting cookies for user: ${userEmail}`);
     const cookies = await page.cookies();
-    console.log(`Got ${cookies.length} cookies from browser for user: ${userEmail}`);
+    console.log(`[saveCookies] Got ${cookies.length} cookies from browser`);
 
     if (cookies.length === 0) {
-      console.log('WARNING: No cookies to save!');
+      console.log('[saveCookies] WARNING: No cookies to save!');
       return false;
     }
 
-    const cookiesJson = JSON.stringify(cookies);
+    // 티스토리 관련 쿠키만 필터링해서 저장
+    const tistoryCookies = cookies.filter((cookie) =>
+      cookie.domain.includes('tistory.com') || cookie.domain.includes('kakao.com')
+    );
+    console.log(`[saveCookies] Filtered to ${tistoryCookies.length} tistory/kakao cookies`);
 
+    const cookiesJson = JSON.stringify(tistoryCookies);
+    console.log(`[saveCookies] Cookie JSON length: ${cookiesJson.length} bytes`);
+
+    console.log(`[saveCookies] Upserting to database...`);
     const result = await prisma.tistoryCookie.upsert({
       where: { userEmail },
       update: { cookies: cookiesJson },
       create: { userEmail, cookies: cookiesJson },
     });
 
-    console.log(`Cookies saved to DB for user: ${userEmail}, record id: ${result.id}`);
+    console.log(`[saveCookies] SUCCESS! Saved to DB for user: ${userEmail}, record id: ${result.id}`);
     return true;
   } catch (error) {
-    console.error('Failed to save cookies to DB:', error);
+    console.error('[saveCookies] FAILED to save cookies to DB:');
+    console.error('[saveCookies] Error type:', error instanceof Error ? error.constructor.name : typeof error);
+    console.error('[saveCookies] Error message:', error instanceof Error ? error.message : String(error));
+    if (error instanceof Error && error.stack) {
+      console.error('[saveCookies] Stack:', error.stack);
+    }
     return false;
   }
 }
@@ -1731,7 +1745,8 @@ async function runLoginProcess(sessionId: string): Promise<void> {
       console.log(`[${sessionId}] Saving cookies for user: ${session.userEmail}...`);
 
       if (session.userEmail) {
-        await saveCookies(page, session.userEmail);
+        const saved = await saveCookies(page, session.userEmail);
+        console.log(`[${sessionId}] First cookie save result: ${saved}`);
 
         // 블로그 페이지로 이동해서 추가 쿠키 획득
         try {
@@ -1740,20 +1755,32 @@ async function runLoginProcess(sessionId: string): Promise<void> {
             timeout: 30000
           });
           await delay(2000);
-          await saveCookies(page, session.userEmail);
+          const saved2 = await saveCookies(page, session.userEmail);
+          console.log(`[${sessionId}] Second cookie save result: ${saved2}`);
         } catch (e) {
-          console.log(`[${sessionId}] Blog page navigation skipped`);
+          console.log(`[${sessionId}] Blog page navigation skipped:`, e);
         }
 
-        session.status = 'success';
-        session.message = '로그인 성공! 쿠키가 저장되었습니다.';
+        // 저장 확인
+        const accounts = await getAllAccounts();
+        console.log(`[${sessionId}] Accounts after save:`, accounts.map(a => a.userEmail));
+
+        if (accounts.some(a => a.userEmail === session.userEmail)) {
+          session.status = 'success';
+          session.message = '로그인 성공! 쿠키가 저장되었습니다.';
+        } else {
+          session.status = 'failed';
+          session.message = '쿠키 저장에 실패했습니다. 다시 시도해주세요.';
+          console.error(`[${sessionId}] Cookie save verification failed!`);
+        }
       } else {
         session.status = 'failed';
         session.message = '이메일 정보가 없어 쿠키를 저장할 수 없습니다.';
+        console.error(`[${sessionId}] No userEmail in session!`);
       }
     } else {
       session.status = 'timeout';
-      session.message = '로그인 시간 초과 (2분). 다시 시도해주세요.';
+      session.message = '로그인 시간 초과 (3분). 다시 시도해주세요.';
     }
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : 'Unknown error';
@@ -1898,7 +1925,8 @@ async function runBrowserbaseLoginProcess(sessionId: string): Promise<void> {
       console.log(`[${sessionId}] Saving cookies for user: ${session.userEmail}...`);
 
       if (session.userEmail) {
-        await saveCookies(page, session.userEmail);
+        const saved = await saveCookies(page, session.userEmail);
+        console.log(`[${sessionId}] First cookie save result: ${saved}`);
 
         // 블로그 페이지로 이동해서 추가 쿠키 획득
         try {
@@ -1907,20 +1935,32 @@ async function runBrowserbaseLoginProcess(sessionId: string): Promise<void> {
             timeout: 30000
           });
           await delay(2000);
-          await saveCookies(page, session.userEmail);
+          const saved2 = await saveCookies(page, session.userEmail);
+          console.log(`[${sessionId}] Second cookie save result: ${saved2}`);
         } catch (e) {
-          console.log(`[${sessionId}] Blog page navigation skipped`);
+          console.log(`[${sessionId}] Blog page navigation skipped:`, e);
         }
 
-        session.status = 'success';
-        session.message = '로그인 성공! 쿠키가 저장되었습니다.';
+        // 저장 확인
+        const accounts = await getAllAccounts();
+        console.log(`[${sessionId}] Accounts after save:`, accounts.map(a => a.userEmail));
+
+        if (accounts.some(a => a.userEmail === session.userEmail)) {
+          session.status = 'success';
+          session.message = '로그인 성공! 쿠키가 저장되었습니다.';
+        } else {
+          session.status = 'failed';
+          session.message = '쿠키 저장에 실패했습니다. 다시 시도해주세요.';
+          console.error(`[${sessionId}] Cookie save verification failed!`);
+        }
       } else {
         session.status = 'failed';
         session.message = '이메일 정보가 없어 쿠키를 저장할 수 없습니다.';
+        console.error(`[${sessionId}] No userEmail in session!`);
       }
     } else {
       session.status = 'timeout';
-      session.message = '로그인 시간 초과 (2분). 다시 시도해주세요.';
+      session.message = '로그인 시간 초과 (3분). 다시 시도해주세요.';
     }
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : 'Unknown error';
