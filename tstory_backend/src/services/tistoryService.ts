@@ -1838,6 +1838,14 @@ async function runBrowserbaseLoginProcess(sessionId: string): Promise<void> {
 
     await page.setViewport({ width: 1280, height: 720 });
 
+    // 쿠키/세션 정리를 위해 먼저 티스토리 메인 방문
+    console.log(`[${sessionId}] Visiting Tistory main page first...`);
+    await page.goto('https://www.tistory.com/', {
+      waitUntil: 'networkidle2',
+      timeout: 30000,
+    });
+    await delay(2000);
+
     console.log(`[${sessionId}] Opening Tistory login page...`);
     session.message = '티스토리 로그인 페이지로 이동 중...';
 
