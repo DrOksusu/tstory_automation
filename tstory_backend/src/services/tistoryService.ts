@@ -1495,10 +1495,17 @@ async function connectToBrowserbase(): Promise<{ browser: Browser; liveViewUrl: 
     // Browserbase SDK 초기화
     const bb = new Browserbase({ apiKey });
 
-    // 세션 생성 (프록시 활성화로 데이터센터 IP 차단 우회)
+    // 세션 생성 (한국 주거용 IP로 Kakao 차단 우회)
     const session = await bb.sessions.create({
       projectId,
-      proxies: true, // Browserbase 프록시 사용 (주거용 IP)
+      proxies: [
+        {
+          type: 'browserbase',
+          geolocation: {
+            country: 'KR', // 한국 IP 사용
+          },
+        },
+      ],
     });
 
     console.log('Browserbase session created:', session.id);
