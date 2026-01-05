@@ -5,7 +5,7 @@
   "scripts": {
     "dev": "nodemon",
     "build": "prisma generate && tsc",
-    "start": "prisma db push && node dist/app.js",
+    "start": "npx prisma db push --accept-data-loss && node dist/app.js",
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate dev",
     "prisma:push": "prisma db push"
