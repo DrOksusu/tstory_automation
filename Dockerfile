@@ -43,4 +43,4 @@ RUN mkdir -p /app/cookies
 EXPOSE 3020
 
 # 앱 실행 (prisma db push로 스키마 동기화 후 시작)
-CMD ["sh", "-c", "npx prisma db push --accept-data-loss && node dist/app.js"]
+CMD ["sh", "-c", "npx prisma db push --force-reset && node dist/app.js"]
