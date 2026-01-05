@@ -42,5 +42,5 @@ RUN mkdir -p /app/cookies
 # 포트 설정
 EXPOSE 3020
 
-# 앱 실행 (prisma db push로 스키마 동기화 후 시작)
-CMD ["sh", "-c", "npx prisma db push --force-reset && node dist/app.js"]
+# 앱 실행
+CMD ["node", "dist/app.js"]
