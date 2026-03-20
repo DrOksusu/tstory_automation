@@ -27,3 +27,20 @@ export interface BlogGenerationResult {
   title?: string;
   error?: string;
 }
+
+export interface TistoryPublishResult {
+  success: boolean;
+  postUrl?: string;
+  error?: string;
+}
+
+export interface LoginSession {
+  id: string;
+  status: 'pending' | 'in_progress' | 'success' | 'failed' | 'timeout';
+  message: string;
+  browser: import('puppeteer').Browser | null;
+  startedAt: number;
+  liveViewUrl?: string; // Browserbase 라이브 뷰 URL
+  browserbaseSessionId?: string; // Browserbase 세션 ID
+  userEmail?: string; // 로그인 유저 이메일
+}

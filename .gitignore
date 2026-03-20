@@ -47,5 +47,8 @@ nul
 NUL
 
 # Temporary/debug files
-*.png
 manual-login.ts
+
+# Auto-generated files
+tsconfig.tsbuildinfo
+next-env.d.ts

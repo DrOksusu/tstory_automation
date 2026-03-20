@@ -30,7 +30,8 @@ export const config = {
   browserbase: {
     apiKey: process.env.BROWSERBASE_API_KEY || '',
     projectId: process.env.BROWSERBASE_PROJECT_ID || '',
-    enabled: !!process.env.BROWSERBASE_API_KEY && !!process.env.BROWSERBASE_PROJECT_ID,
+    // Auto-login uses local Puppeteer (faster), manual login uses Browserbase (for live view)
+    enabled: process.env.BROWSERBASE_ENABLED === 'true',
   },
 
   // AWS S3 (이미지 업로드용)

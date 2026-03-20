@@ -1,5 +1,6 @@
 import { Router, Request, Response } from 'express';
 import { testLogin, clearCookies, manualLogin, startManualLogin, getLoginStatus, cancelLogin, checkCookiesExist, getAllAccounts } from '../services/tistoryService';
+import { saveCredential, getCredential, getAllCredentials, deleteCredential } from '../services/credentialService';
 import { config } from '../config';
 
 const router = Router();
@@ -25,6 +26,13 @@ router.post('/test-login', async (req: Request, res: Response) => {
     const result = await testLogin({ email, password });
 
     if (result.success) {
+      // 로그인 성공 시 자격증명도 자동 저장
+      try {
+        await saveCredential(email, password);
+      } catch (credErr) {
+        console.error('자격증명 저장 실패 (로그인은 성공):', credErr);
+      }
+
       res.json({
         success: true,
         message: result.message,
@@ -41,6 +49,8 @@ router.post('/test-login', async (req: Request, res: Response) => {
   } catch (error) {
     console.error('Login test error:', error);
     const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+    const errorStack = error instanceof Error ? error.stack : '';
+    console.error('Login test stack:', errorStack);
     res.status(500).json({
       success: false,
       error: errorMessage,
@@ -265,6 +275,82 @@ router.get('/status', (req: Request, res: Response) => {
     geminiApiKey: hasGeminiKey ? 'configured' : 'missing',
     testLoginUrl: `http://localhost:${config.port}/auth/test-login`,
   });
+});
+
+/**
+ * 저장된 자격증명 목록 조회 (이메일+저장일자만, 비밀번호 제외)
+ * GET /auth/credentials
+ */
+router.get('/credentials', async (req: Request, res: Response) => {
+  try {
+    const credentials = await getAllCredentials();
+    res.json({ success: true, credentials });
+  } catch (error) {
+    console.error('Get credentials error:', error);
+    res.status(500).json({ success: false, error: '자격증명 목록 조회 실패' });
+  }
+});
+
+/**
+ * 자격증명 저장
+ * POST /auth/credentials
+ * Body: { email: string, password: string }
+ */
+router.post('/credentials', async (req: Request, res: Response) => {
+  try {
+    const { email, password } = req.body;
+    if (!email || !password) {
+      res.status(400).json({ success: false, message: '이메일과 비밀번호를 입력해주세요.' });
+      return;
+    }
+    await saveCredential(email, password);
+    res.json({ success: true, message: '자격증명이 저장되었습니다.' });
+  } catch (error) {
+    console.error('Save credential error:', error instanceof Error ? error.message : error);
+    console.error('Save credential stack:', error instanceof Error ? error.stack : '');
+    res.status(500).json({ success: false, error: error instanceof Error ? error.message : '자격증명 저장 실패' });
+  }
+});
+
+/**
+ * 자격증명 조회 (복호화된 비밀번호 포함)
+ * GET /auth/credentials/:email
+ */
+router.get('/credentials/:email', async (req: Request, res: Response) => {
+  try {
+    const { email } = req.params;
+    const credential = await getCredential(email);
+    if (!credential) {
+      res.status(404).json({ success: false, message: '저장된 자격증명이 없습니다.' });
+      return;
+    }
+    res.json({ success: true, credential });
+  } catch (error) {
+    console.error('Get credential error:', error);
+    res.status(500).json({ success: false, error: '자격증명 조회 실패' });
+  }
+});
+
+/**
+ * 자격증명 삭제
+ * DELETE /auth/credentials?email=...
+ */
+router.delete('/credentials', async (req: Request, res: Response) => {
+  try {
+    const email = req.query.email as string;
+    if (!email) {
+      res.status(400).json({ success: false, message: '이메일을 지정해주세요.' });
+      return;
+    }
+    const deleted = await deleteCredential(email);
+    res.json({
+      success: true,
+      message: deleted ? '자격증명이 삭제되었습니다.' : '삭제할 자격증명이 없습니다.',
+    });
+  } catch (error) {
+    console.error('Delete credential error:', error);
+    res.status(500).json({ success: false, error: '자격증명 삭제 실패' });
+  }
 });
 
 export default router;

@@ -1,67 +1,57 @@
 'use client';
 
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/contexts/AuthContext';
 import BlogForm from '@/components/BlogForm';
 import PreviewModal from '@/components/PreviewModal';
 import ResultModal from '@/components/ResultModal';
-
-interface PreviewData {
-  title: string;
-  metaDescription: string;
-  content: string;
-}
-
-interface PublishResult {
-  success: boolean;
-  postId?: number;
-  tistoryUrl?: string;
-  title?: string;
-  error?: string;
-}
-
-interface TistoryAccount {
-  userEmail: string;
-  savedAt: string;
-}
-
-interface PublishProgress {
-  status: string;
-  message: string;
-  step: number;
-  totalSteps: number;
-}
-
-interface AddAccountStatus {
-  message: string;
-  liveViewUrl?: string;
-}
+import { useTistoryAccounts } from '@/hooks/useTistoryAccounts';
+import { useBlogPublish } from '@/hooks/useBlogPublish';
 
 export default function Home() {
   const { user, isLoading } = useAuth();
   const router = useRouter();
-  const [loading, setLoading] = useState(false);
-  const [loadingType, setLoadingType] = useState<'preview' | 'publish' | null>(null);
-  const [previewData, setPreviewData] = useState<PreviewData | null>(null);
-  const [publishResult, setPublishResult] = useState<PublishResult | null>(null);
-  const [publishProgress, setPublishProgress] = useState<PublishProgress | null>(null);
-  const [formData, setFormData] = useState({
-    sourceUrl: '',
-    mainKeyword: '',
-    regionKeyword: '',
-  });
 
-  // 계정 관리 상태
-  const [accounts, setAccounts] = useState<TistoryAccount[]>([]);
-  const [selectedAccount, setSelectedAccount] = useState<string | null>(null);
-  const [loadingAccounts, setLoadingAccounts] = useState(true);
-  const [addingAccount, setAddingAccount] = useState(false);
-  const [addAccountStatus, setAddAccountStatus] = useState<AddAccountStatus | null>(null);
-  const [showAddAccountModal, setShowAddAccountModal] = useState(false);
-  const [newAccountEmail, setNewAccountEmail] = useState('');
-  const [newAccountPassword, setNewAccountPassword] = useState('');
-  const loginSessionIdRef = useRef<string | null>(null);
+  const {
+    accounts,
+    selectedAccount,
+    setSelectedAccount,
+    loadingAccounts,
+    addingAccount,
+    addAccountStatus,
+    showAddAccountModal,
+    setShowAddAccountModal,
+    newAccountEmail,
+    setNewAccountEmail,
+    newAccountPassword,
+    setNewAccountPassword,
+    handleAddAccountAuto,
+    handleAddAccountManual,
+    handleDeleteAccount,
+    setAddAccountStatus,
+    fetchAccounts,
+    savedCredentials,
+    saveCredentialChecked,
+    setSaveCredentialChecked,
+    fetchCredentials,
+    handleSelectCredential,
+  } = useTistoryAccounts();
+
+  const {
+    loading,
+    loadingType,
+    previewData,
+    setPreviewData,
+    publishResult,
+    setPublishResult,
+    publishProgress,
+    formData,
+    setFormData,
+    handlePreview,
+    handlePublish,
+    handlePublishFromPreview,
+  } = useBlogPublish(selectedAccount);
 
   // 로그인하지 않은 경우 로그인 페이지로 리다이렉트
   useEffect(() => {
@@ -70,438 +60,13 @@ export default function Home() {
     }
   }, [user, isLoading, router]);
 
-  // 계정 목록 로드 함수
-  const fetchAccounts = useCallback(async (selectEmail?: string) => {
-    try {
-      setLoadingAccounts(true);
-      const response = await fetch('/auth/accounts');
-      const data = await response.json();
-      console.log('Fetched accounts:', data);
-      if (data.success) {
-        setAccounts(data.accounts);
-        // 특정 계정 선택 또는 첫 번째 계정 자동 선택
-        if (selectEmail) {
-          setSelectedAccount(selectEmail);
-        } else if (data.accounts.length > 0) {
-          setSelectedAccount((prev) => prev || data.accounts[0].userEmail);
-        }
-      }
-    } catch (error) {
-      console.error('Failed to fetch accounts:', error);
-    } finally {
-      setLoadingAccounts(false);
-    }
-  }, []);
-
-  // 초기 계정 목록 로드 (user가 변경될 때만)
+  // 초기 계정 목록 + 자격증명 목록 로드 (user가 변경될 때만)
   useEffect(() => {
     if (user) {
       fetchAccounts();
+      fetchCredentials();
     }
-  }, [user, fetchAccounts]);
-
-  // 계정 추가 (자동 로그인)
-  const handleAddAccountAuto = async () => {
-    if (!newAccountEmail || !newAccountPassword) {
-      setAddAccountStatus({ message: '이메일과 비밀번호를 입력해주세요.' });
-      return;
-    }
-
-    setAddingAccount(true);
-    setAddAccountStatus({ message: '로그인 중...' });
-
-    try {
-      const response = await fetch('/auth/test-login', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          email: newAccountEmail,
-          password: newAccountPassword,
-        }),
-      });
-
-      const data = await response.json();
-
-      if (data.success) {
-        setAddAccountStatus({ message: '계정 추가 완료!' });
-        console.log('Auto login success, refreshing accounts...');
-        // 계정 목록 새로고침
-        await fetchAccounts(newAccountEmail);
-        // 모달 닫기
-        setTimeout(() => {
-          setShowAddAccountModal(false);
-          setAddAccountStatus(null);
-          setNewAccountEmail('');
-          setNewAccountPassword('');
-        }, 1000);
-      } else {
-        setAddAccountStatus({ message: data.message || '로그인 실패. 2FA 사용 시 수동 로그인을 이용하세요.' });
-        console.log('Auto login failed:', data.message);
-      }
-    } catch (error) {
-      setAddAccountStatus({ message: '서버 연결에 실패했습니다.' });
-      console.error(error);
-    } finally {
-      setAddingAccount(false);
-    }
-  };
-
-  // 계정 추가 (수동 로그인 - 2FA 지원)
-  const handleAddAccountManual = async () => {
-    if (!newAccountEmail) {
-      setAddAccountStatus({ message: '이메일을 입력해주세요.' });
-      return;
-    }
-
-    setAddingAccount(true);
-    setAddAccountStatus({ message: '브라우저 창 열기 중...' });
-
-    try {
-      const response = await fetch('/auth/start-login', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email: newAccountEmail }),
-      });
-
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.message || '로그인 시작 실패');
-      }
-
-      const data = await response.json();
-      const { sessionId, liveViewUrl } = data;
-
-      if (!sessionId) {
-        throw new Error('세션 ID를 받지 못했습니다.');
-      }
-
-      loginSessionIdRef.current = sessionId;
-
-      if (liveViewUrl) {
-        setAddAccountStatus({
-          message: '라이브 뷰에서 카카오 로그인을 완료해주세요.',
-          liveViewUrl,
-        });
-        window.open(liveViewUrl, 'browserbase-login', 'width=1300,height=800');
-      } else {
-        setAddAccountStatus({ message: '브라우저에서 로그인을 완료해주세요.' });
-      }
-
-      // 폴링 (3분 + 여유시간)
-      const maxPollingTime = 200000;
-      const pollingInterval = 2000;
-      const startTime = Date.now();
-
-      while (Date.now() - startTime < maxPollingTime) {
-        await new Promise((resolve) => setTimeout(resolve, pollingInterval));
-
-        try {
-          const statusResponse = await fetch(`/auth/login-status/${sessionId}`);
-          const statusData = await statusResponse.json();
-
-          setAddAccountStatus({
-            message: statusData.message,
-            liveViewUrl: statusData.liveViewUrl || liveViewUrl,
-          });
-
-          if (statusData.completed) {
-            loginSessionIdRef.current = null;
-            if (statusData.success) {
-              setAddAccountStatus({ message: '계정 추가 완료!' });
-              console.log('Manual login success, refreshing accounts...');
-              // 계정 목록 새로고침
-              await fetchAccounts(newAccountEmail);
-              setTimeout(() => {
-                setShowAddAccountModal(false);
-                setAddAccountStatus(null);
-                setNewAccountEmail('');
-                setNewAccountPassword('');
-              }, 1000);
-            } else {
-              setAddAccountStatus({ message: statusData.message });
-              console.log('Manual login failed:', statusData.message);
-            }
-            return;
-          }
-
-          if (statusData.status === 'failed' || statusData.status === 'timeout') {
-            loginSessionIdRef.current = null;
-            setAddAccountStatus({ message: statusData.message });
-            return;
-          }
-        } catch (pollError) {
-          console.error('Polling error:', pollError);
-        }
-      }
-
-      setAddAccountStatus({ message: '시간 초과. 다시 시도해주세요.' });
-    } catch (error) {
-      setAddAccountStatus({ message: error instanceof Error ? error.message : '오류 발생' });
-      console.error(error);
-    } finally {
-      setAddingAccount(false);
-    }
-  };
-
-  // 계정 삭제
-  const handleDeleteAccount = async (email: string) => {
-    if (!confirm(`${email} 계정을 삭제하시겠습니까?`)) {
-      return;
-    }
-
-    try {
-      const response = await fetch(`/auth/cookies?email=${encodeURIComponent(email)}`, {
-        method: 'DELETE',
-      });
-
-      const data = await response.json();
-      if (data.success) {
-        setAccounts(accounts.filter((a) => a.userEmail !== email));
-        if (selectedAccount === email) {
-          setSelectedAccount(accounts.length > 1 ? accounts.find((a) => a.userEmail !== email)?.userEmail || null : null);
-        }
-      }
-    } catch (error) {
-      alert('계정 삭제에 실패했습니다.');
-      console.error(error);
-    }
-  };
-
-  const handlePreview = async () => {
-    if (!formData.sourceUrl || !formData.mainKeyword || !formData.regionKeyword) {
-      alert('모든 필드를 입력해주세요.');
-      return;
-    }
-
-    setLoading(true);
-    setLoadingType('preview');
-
-    try {
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 180000);
-
-      const response = await fetch('/api/blog/preview', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(formData),
-        signal: controller.signal,
-      });
-
-      clearTimeout(timeoutId);
-
-      const contentType = response.headers.get('content-type');
-      if (!contentType || !contentType.includes('application/json')) {
-        const text = await response.text();
-        throw new Error(`서버 오류: ${text || response.statusText}`);
-      }
-
-      const data = await response.json();
-
-      if (data.success) {
-        setPreviewData(data);
-      } else {
-        alert(`미리보기 실패: ${data.error}`);
-      }
-    } catch (error) {
-      let message = '서버 연결에 실패했습니다.';
-      if (error instanceof Error) {
-        message = error.name === 'AbortError' ? '요청 시간이 초과되었습니다.' : error.message;
-      }
-      alert(message);
-      console.error(error);
-    } finally {
-      setLoading(false);
-      setLoadingType(null);
-    }
-  };
-
-  const getStepFromStatus = (status: string): { step: number; totalSteps: number } => {
-    const steps: Record<string, number> = {
-      'pending': 1,
-      'generating': 2,
-      'publishing': 3,
-      'success': 4,
-      'failed': 4,
-    };
-    return { step: steps[status] || 1, totalSteps: 4 };
-  };
-
-  const handlePublish = async () => {
-    if (!selectedAccount) {
-      alert('발행할 티스토리 계정을 선택해주세요.');
-      return;
-    }
-
-    if (!formData.sourceUrl || !formData.mainKeyword || !formData.regionKeyword) {
-      alert('모든 필드를 입력해주세요.');
-      return;
-    }
-
-    setLoading(true);
-    setLoadingType('publish');
-    setPublishProgress({ status: 'pending', message: '발행 준비 중...', step: 1, totalSteps: 4 });
-
-    try {
-      const startResponse = await fetch('/api/blog/start-generate', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ...formData, userEmail: selectedAccount }),
-      });
-
-      if (!startResponse.ok) {
-        const errorData = await startResponse.json();
-        throw new Error(errorData.error || '발행 시작에 실패했습니다.');
-      }
-
-      const startData = await startResponse.json();
-      const { taskId } = startData;
-
-      if (!taskId) {
-        throw new Error('작업 ID를 받지 못했습니다.');
-      }
-
-      const maxPollingTime = 600000;
-      const pollingInterval = 3000;
-      const startTime = Date.now();
-
-      while (Date.now() - startTime < maxPollingTime) {
-        await new Promise((resolve) => setTimeout(resolve, pollingInterval));
-
-        const statusResponse = await fetch(`/api/blog/status/${taskId}`);
-        const statusData = await statusResponse.json();
-
-        const { step, totalSteps } = getStepFromStatus(statusData.status);
-        setPublishProgress({
-          status: statusData.status,
-          message: statusData.message,
-          step,
-          totalSteps,
-        });
-
-        if (statusData.completed) {
-          setPublishProgress(null);
-          if (statusData.success && statusData.result) {
-            setPublishResult(statusData.result);
-          } else {
-            setPublishResult({
-              success: false,
-              error: statusData.error || statusData.message,
-            });
-          }
-          return;
-        }
-      }
-
-      setPublishProgress(null);
-      setPublishResult({
-        success: false,
-        error: '작업 시간 초과 (10분).',
-      });
-    } catch (error) {
-      let message = '서버 연결에 실패했습니다.';
-      if (error instanceof Error) {
-        message = error.message;
-      }
-      setPublishProgress(null);
-      setPublishResult({
-        success: false,
-        error: message,
-      });
-      console.error(error);
-    } finally {
-      setLoading(false);
-      setLoadingType(null);
-    }
-  };
-
-  const handlePublishFromPreview = async (editedData: PreviewData) => {
-    if (!selectedAccount) {
-      alert('발행할 티스토리 계정을 선택해주세요.');
-      return;
-    }
-
-    setPreviewData(null);
-    setLoading(true);
-    setLoadingType('publish');
-    setPublishProgress({ status: 'pending', message: '발행 준비 중...', step: 1, totalSteps: 3 });
-
-    try {
-      const startResponse = await fetch('/api/blog/publish-content', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          title: editedData.title,
-          content: editedData.content,
-          metaDescription: editedData.metaDescription,
-          userEmail: selectedAccount,
-        }),
-      });
-
-      if (!startResponse.ok) {
-        const errorData = await startResponse.json();
-        throw new Error(errorData.error || '발행 시작에 실패했습니다.');
-      }
-
-      const startData = await startResponse.json();
-      const { taskId } = startData;
-
-      if (!taskId) {
-        throw new Error('작업 ID를 받지 못했습니다.');
-      }
-
-      const maxPollingTime = 300000;
-      const pollingInterval = 3000;
-      const startTime = Date.now();
-
-      while (Date.now() - startTime < maxPollingTime) {
-        await new Promise((resolve) => setTimeout(resolve, pollingInterval));
-
-        const statusResponse = await fetch(`/api/blog/status/${taskId}`);
-        const statusData = await statusResponse.json();
-
-        const previewSteps: Record<string, number> = { 'pending': 1, 'publishing': 2, 'success': 3, 'failed': 3 };
-        setPublishProgress({
-          status: statusData.status,
-          message: statusData.message,
-          step: previewSteps[statusData.status] || 1,
-          totalSteps: 3,
-        });
-
-        if (statusData.completed) {
-          setPublishProgress(null);
-          if (statusData.success && statusData.result) {
-            setPublishResult(statusData.result);
-          } else {
-            setPublishResult({
-              success: false,
-              error: statusData.error || statusData.message,
-            });
-          }
-          return;
-        }
-      }
-
-      setPublishProgress(null);
-      setPublishResult({
-        success: false,
-        error: '작업 시간 초과 (5분).',
-      });
-    } catch (error) {
-      let message = '서버 연결에 실패했습니다.';
-      if (error instanceof Error) {
-        message = error.message;
-      }
-      setPublishProgress(null);
-      setPublishResult({
-        success: false,
-        error: message,
-      });
-      console.error(error);
-    } finally {
-      setLoading(false);
-      setLoadingType(null);
-    }
-  };
+  }, [user, fetchAccounts, fetchCredentials]);
 
   if (isLoading || !user) {
     return (
@@ -665,6 +230,34 @@ export default function Home() {
             </p>
 
             <div className="space-y-4">
+              {/* 저장된 자격증명 드롭다운 */}
+              {savedCredentials.length > 0 && (
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-1">저장된 계정 선택</label>
+                  <select
+                    onChange={(e) => {
+                      const value = e.target.value;
+                      if (value === '') {
+                        setNewAccountEmail('');
+                        setNewAccountPassword('');
+                      } else {
+                        handleSelectCredential(value);
+                      }
+                    }}
+                    value={savedCredentials.some((c) => c.userEmail === newAccountEmail) ? newAccountEmail : ''}
+                    className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500 bg-white text-slate-800"
+                    disabled={addingAccount}
+                  >
+                    <option value="">+ 새 계정 입력</option>
+                    {savedCredentials.map((cred) => (
+                      <option key={cred.userEmail} value={cred.userEmail}>
+                        {cred.userEmail}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
+
               <div>
                 <label className="block text-sm font-medium text-slate-700 mb-1">카카오 이메일</label>
                 <input
@@ -704,6 +297,18 @@ export default function Home() {
                   수동 로그인 (2FA)
                 </button>
               </div>
+
+              {/* 자격증명 저장 체크박스 */}
+              <label className="flex items-center gap-2 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={saveCredentialChecked}
+                  onChange={(e) => setSaveCredentialChecked(e.target.checked)}
+                  className="w-4 h-4 text-orange-500 border-slate-300 rounded focus:ring-orange-500"
+                  disabled={addingAccount}
+                />
+                <span className="text-sm text-slate-600">자격증명 저장 (다음에 드롭다운으로 선택 가능)</span>
+              </label>
 
               <p className="text-xs text-slate-500 text-center">
                 2단계 인증을 사용 중이라면 수동 로그인을 이용하세요.
