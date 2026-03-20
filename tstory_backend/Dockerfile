@@ -36,7 +36,7 @@ COPY dist ./dist/
 RUN mkdir -p /app/cookies
 
 # 포트 설정
-EXPOSE 3020
+EXPOSE 3010
 
 # 앱 실행
 CMD ["node", "dist/app.js"]

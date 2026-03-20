@@ -72,13 +72,13 @@ jobs:
             docker run -d \
               --name tstory-backend \
               --restart unless-stopped \
-              -p 3020:3020 \
+              -p 3010:3010 \
               -e DATABASE_URL="${{ secrets.DATABASE_URL }}" \
               -e GEMINI_API_KEY="${{ secrets.GEMINI_API_KEY }}" \
               -e KAKAO_EMAIL="${{ secrets.KAKAO_EMAIL }}" \
               -e KAKAO_PASSWORD="${{ secrets.KAKAO_PASSWORD }}" \
               -e TISTORY_BLOG_NAME="${{ secrets.TISTORY_BLOG_NAME }}" \
-              -e PORT=3020 \
+              -e PORT=3010 \
               -e NODE_ENV=production \
               -e BROWSERBASE_API_KEY="${{ secrets.BROWSERBASE_API_KEY }}" \
               -e BROWSERBASE_PROJECT_ID="${{ secrets.BROWSERBASE_PROJECT_ID }}" \
