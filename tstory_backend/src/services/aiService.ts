@@ -7,7 +7,7 @@ export async function generateBlogContent(
   sourceUrl: string,
   mainKeyword: string,
   regionKeyword: string,
-  aiModel: 'gemini' | 'claude' = 'gemini'
+  aiModel: 'gemini' | 'claude' = 'claude'
 ): Promise<GeneratedContent> {
   console.log(`AI 모델 선택: ${aiModel}`);
 
