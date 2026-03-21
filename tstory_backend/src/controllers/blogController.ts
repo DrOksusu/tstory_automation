@@ -1,5 +1,5 @@
 import { Request, Response } from 'express';
-import { generateBlogContent } from '../services/geminiService';
+import { generateBlogContent } from '../services/aiService';
 import { publishToTistory } from '../services/tistoryService';
 import { cleanHtml, cleanMetaDescription } from '../utils/htmlProcessor';
 import prisma from '../services/prismaClient';
@@ -34,7 +34,7 @@ export async function startGenerate(
   req: Request<object, object, GenerateBlogRequest>,
   res: Response
 ): Promise<void> {
-  const { sourceUrl, mainKeyword, regionKeyword, userEmail } = req.body;
+  const { sourceUrl, mainKeyword, regionKeyword, userEmail, aiModel } = req.body;
 
   if (!sourceUrl || !mainKeyword || !regionKeyword) {
     res.status(400).json({
@@ -56,7 +56,7 @@ export async function startGenerate(
   generateTasks.set(taskId, task);
 
   // 백그라운드에서 작업 실행
-  runGenerateTask(taskId, sourceUrl, mainKeyword, regionKeyword, userEmail).catch((error) => {
+  runGenerateTask(taskId, sourceUrl, mainKeyword, regionKeyword, userEmail, aiModel).catch((error) => {
     console.error(`Generate task error for ${taskId}:`, error);
     const task = generateTasks.get(taskId);
     if (task) {
@@ -111,21 +111,24 @@ async function runGenerateTask(
   sourceUrl: string,
   mainKeyword: string,
   regionKeyword: string,
-  userEmail?: string
+  userEmail?: string,
+  aiModel?: 'gemini' | 'claude'
 ): Promise<void> {
   const task = generateTasks.get(taskId);
   if (!task) return;
 
   try {
-    // 1. Gemini로 글 생성
+    // 1. AI로 글 생성
+    const modelName = aiModel || 'gemini';
     task.status = 'generating';
-    task.message = 'AI가 글을 생성하는 중...';
-    console.log(`[${taskId}] Generating blog content with Gemini...`);
+    task.message = `AI(${modelName})가 글을 생성하는 중...`;
+    console.log(`[${taskId}] Generating blog content with ${modelName}...`);
 
     const generatedContent = await generateBlogContent(
       sourceUrl,
       mainKeyword,
-      regionKeyword
+      regionKeyword,
+      modelName
     );
 
     // 2. HTML 후처리
@@ -355,7 +358,7 @@ export async function generateAndPublish(
   req: Request<object, object, GenerateBlogRequest>,
   res: Response
 ): Promise<void> {
-  const { sourceUrl, mainKeyword, regionKeyword, userEmail } = req.body;
+  const { sourceUrl, mainKeyword, regionKeyword, userEmail, aiModel } = req.body;
 
   // 입력값 검증
   if (!sourceUrl || !mainKeyword || !regionKeyword) {
@@ -367,12 +370,14 @@ export async function generateAndPublish(
   }
 
   try {
-    // 1. Gemini로 글 생성
-    console.log('Generating blog content with Gemini...');
+    // 1. AI로 글 생성
+    const modelName = aiModel || 'gemini';
+    console.log(`Generating blog content with ${modelName}...`);
     const generatedContent = await generateBlogContent(
       sourceUrl,
       mainKeyword,
-      regionKeyword
+      regionKeyword,
+      modelName
     );
 
     // 2. HTML 후처리
@@ -455,7 +460,7 @@ export async function generatePreview(
   req: Request<object, object, GenerateBlogRequest>,
   res: Response
 ): Promise<void> {
-  const { sourceUrl, mainKeyword, regionKeyword } = req.body;
+  const { sourceUrl, mainKeyword, regionKeyword, aiModel } = req.body;
 
   if (!sourceUrl || !mainKeyword || !regionKeyword) {
     res.status(400).json({
@@ -466,11 +471,13 @@ export async function generatePreview(
   }
 
   try {
-    // Gemini로 글 생성
+    // AI로 글 생성
+    const modelName = aiModel || 'gemini';
     const generatedContent = await generateBlogContent(
       sourceUrl,
       mainKeyword,
-      regionKeyword
+      regionKeyword,
+      modelName
     );
 
     // HTML 후처리

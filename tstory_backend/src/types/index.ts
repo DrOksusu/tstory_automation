@@ -3,6 +3,7 @@ export interface GenerateBlogRequest {
   mainKeyword: string;    // 메인 키워드
   regionKeyword: string;  // 지역 키워드
   userEmail?: string;     // 사용자 이메일 (쿠키 로드용)
+  aiModel?: 'gemini' | 'claude';  // AI 모델 선택 (기본값: gemini)
 }
 
 export interface GeneratedContent {

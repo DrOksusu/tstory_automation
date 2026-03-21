@@ -30,7 +30,7 @@ export async function generateBlogContent(
   return parseGeneratedContent(text);
 }
 
-function buildPrompt(
+export function buildPrompt(
   mainKeyword: string,
   regionKeyword: string,
   sourceContent: string
@@ -63,7 +63,7 @@ ${sourceContent}
 `;
 }
 
-function parseGeneratedContent(text: string): GeneratedContent {
+export function parseGeneratedContent(text: string): GeneratedContent {
   console.log('Parsing Gemini response...');
   console.log('Response length:', text.length);
   console.log('First 200 chars:', text.substring(0, 200));

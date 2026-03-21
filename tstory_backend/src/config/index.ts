@@ -10,6 +10,10 @@ export const config = {
     apiKey: process.env.GEMINI_API_KEY || '',
   },
 
+  claude: {
+    apiKey: process.env.ANTHROPIC_API_KEY || '',
+  },
+
   // 카카오 계정 (티스토리 로그인용)
   kakao: {
     email: process.env.KAKAO_EMAIL || '',

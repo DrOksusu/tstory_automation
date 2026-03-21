@@ -75,6 +75,7 @@ jobs:
               -p 3010:3010 \
               -e DATABASE_URL="${{ secrets.DATABASE_URL }}" \
               -e GEMINI_API_KEY="${{ secrets.GEMINI_API_KEY }}" \
+              -e ANTHROPIC_API_KEY="${{ secrets.ANTHROPIC_API_KEY }}" \
               -e KAKAO_EMAIL="${{ secrets.KAKAO_EMAIL }}" \
               -e KAKAO_PASSWORD="${{ secrets.KAKAO_PASSWORD }}" \
               -e TISTORY_BLOG_NAME="${{ secrets.TISTORY_BLOG_NAME }}" \
