@@ -119,7 +119,7 @@ async function runGenerateTask(
 
   try {
     // 1. AI로 글 생성
-    const modelName = aiModel || 'gemini';
+    const modelName = aiModel || 'claude';
     task.status = 'generating';
     task.message = `AI(${modelName})가 글을 생성하는 중...`;
     console.log(`[${taskId}] Generating blog content with ${modelName}...`);
@@ -371,7 +371,7 @@ export async function generateAndPublish(
 
   try {
     // 1. AI로 글 생성
-    const modelName = aiModel || 'gemini';
+    const modelName = aiModel || 'claude';
     console.log(`Generating blog content with ${modelName}...`);
     const generatedContent = await generateBlogContent(
       sourceUrl,
@@ -472,7 +472,7 @@ export async function generatePreview(
 
   try {
     // AI로 글 생성
-    const modelName = aiModel || 'gemini';
+    const modelName = aiModel || 'claude';
     const generatedContent = await generateBlogContent(
       sourceUrl,
       mainKeyword,
