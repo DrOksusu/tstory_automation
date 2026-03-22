@@ -61,12 +61,23 @@ export default function BlogForm({
             <input
               type="text"
               name="mainKeyword"
+              list="mainKeywordList"
               value={formData.mainKeyword}
               onChange={handleChange}
               placeholder="예: 임플란트 수술"
               className="w-full px-4 py-3 border border-slate-300 rounded-xl focus:ring-2 focus:ring-orange-500 focus:border-orange-500 transition-all outline-none"
               disabled={loading}
             />
+            <datalist id="mainKeywordList">
+              <option value="임플란트" />
+              <option value="치아교정" />
+              <option value="라미네이트" />
+              <option value="충치치료" />
+              <option value="스케일링" />
+              <option value="치아미백" />
+              <option value="사랑니발치" />
+              <option value="신경치료" />
+            </datalist>
             <p className="mt-1.5 text-xs text-slate-500">
               글 본문에 자연스럽게 삽입될 메인 키워드
             </p>
@@ -79,12 +90,20 @@ export default function BlogForm({
             <input
               type="text"
               name="regionKeyword"
+              list="regionKeywordList"
               value={formData.regionKeyword}
               onChange={handleChange}
               placeholder="예: 이수역"
               className="w-full px-4 py-3 border border-slate-300 rounded-xl focus:ring-2 focus:ring-orange-500 focus:border-orange-500 transition-all outline-none"
               disabled={loading}
             />
+            <datalist id="regionKeywordList">
+              <option value="이수역" />
+              <option value="사당" />
+              <option value="사당동" />
+              <option value="방배동" />
+              <option value="동작구" />
+            </datalist>
             <p className="mt-1.5 text-xs text-slate-500">
               제목에 포함될 지역 키워드
             </p>
