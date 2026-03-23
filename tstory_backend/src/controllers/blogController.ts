@@ -11,6 +11,8 @@ interface GenerateTask {
   id: string;
   status: 'pending' | 'generating' | 'publishing' | 'success' | 'failed';
   message: string;
+  step: number;
+  totalSteps: number;
   result?: BlogGenerationResult;
   error?: string;
   startedAt: number;
@@ -50,6 +52,8 @@ export async function startGenerate(
     id: taskId,
     status: 'pending',
     message: '작업을 시작하는 중...',
+    step: 1,
+    totalSteps: 12,
     startedAt: Date.now(),
   };
 
@@ -97,6 +101,8 @@ export function getGenerateStatus(req: Request, res: Response): void {
     success: task.status === 'success',
     status: task.status,
     message: task.message,
+    step: task.step,
+    totalSteps: task.totalSteps,
     completed,
     result: task.result,
     error: task.error,
@@ -118,9 +124,14 @@ async function runGenerateTask(
   if (!task) return;
 
   try {
-    // 1. AI로 글 생성
-    const modelName = aiModel || 'claude';
+    // 1. 작업 시작
+    task.step = 1;
+    task.totalSteps = 12;
+
+    // 2. AI로 글 생성
     task.status = 'generating';
+    const modelName = aiModel || 'claude';
+    task.step = 2;
     task.message = `AI(${modelName})가 글을 생성하는 중...`;
     console.log(`[${taskId}] Generating blog content with ${modelName}...`);
 
@@ -131,12 +142,14 @@ async function runGenerateTask(
       modelName
     );
 
-    // 2. HTML 후처리
+    // 3. HTML 후처리
+    task.step = 3;
     task.message = 'HTML 처리 중...';
     console.log(`[${taskId}] Processing HTML...`);
     const cleanedContent = cleanHtml(generatedContent.content);
 
-    // 3. DB에 저장
+    // 4. DB에 저장
+    task.step = 4;
     task.message = '데이터베이스 저장 중...';
     console.log(`[${taskId}] Saving to database...`);
     const blogPost = await prisma.blogPost.create({
@@ -150,17 +163,18 @@ async function runGenerateTask(
       },
     });
 
-    // 4. 티스토리에 발행
+    // 5~12. 티스토리에 발행 (onProgress 8회 호출)
     task.status = 'publishing';
     task.message = '티스토리에 발행 중... (브라우저 작업 진행 중)';
     console.log(`[${taskId}] Publishing to Tistory... (user: ${userEmail || 'none'})`);
 
+    let publishStep = 4;
     const tistoryResult = await publishToTistory({
       title: generatedContent.title,
       content: cleanedContent,
       tag: `${mainKeyword},${regionKeyword}`,
       userEmail,
-      onProgress: (msg) => { task.message = msg; },
+      onProgress: (msg) => { publishStep++; task.step = publishStep; task.message = msg; },
     });
 
     if (!tistoryResult.success) {
@@ -242,6 +256,8 @@ export async function startPublishContent(
     id: taskId,
     status: 'pending',
     message: '발행 작업을 시작하는 중...',
+    step: 1,
+    totalSteps: 10,
     startedAt: Date.now(),
   };
 
@@ -278,8 +294,13 @@ async function runPublishContentTask(
   if (!task) return;
 
   try {
-    // 1. DB에 저장
+    // 1. 발행 준비
+    task.step = 1;
+    task.totalSteps = 10;
+
+    // 2. DB에 저장
     task.status = 'publishing';
+    task.step = 2;
     task.message = '데이터베이스 저장 중...';
     console.log(`[${taskId}] Saving edited content to database...`);
 
@@ -294,16 +315,17 @@ async function runPublishContentTask(
       },
     });
 
-    // 2. 티스토리에 발행
+    // 3~10. 티스토리에 발행 (onProgress 8회 호출)
     task.message = '티스토리에 발행 중... (브라우저 작업 진행 중)';
     console.log(`[${taskId}] Publishing edited content to Tistory... (user: ${userEmail || 'none'})`);
 
+    let publishStep = 2;
     const tistoryResult = await publishToTistory({
       title: title,
       content: content,
       tag: '',
       userEmail,
-      onProgress: (msg) => { task.message = msg; },
+      onProgress: (msg) => { publishStep++; task.step = publishStep; task.message = msg; },
     });
 
     if (!tistoryResult.success) {

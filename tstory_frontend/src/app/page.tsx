@@ -371,31 +371,20 @@ export default function Home() {
           <div className="relative bg-white rounded-2xl shadow-2xl p-8 max-w-md w-full mx-4">
             <h3 className="text-xl font-bold text-slate-800 text-center mb-6">발행 진행 중</h3>
             <div className="mb-6">
-              <div className="flex justify-between mb-2">
-                {Array.from({ length: publishProgress.totalSteps }, (_, i) => (
+              <div className="flex items-center justify-between mb-2">
+                <div className="relative flex-1 h-3 bg-slate-200 rounded-full overflow-hidden">
                   <div
-                    key={i}
-                    className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold transition-all ${
-                      i + 1 < publishProgress.step
-                        ? 'bg-green-500 text-white'
-                        : i + 1 === publishProgress.step
-                        ? 'bg-orange-500 text-white animate-pulse'
-                        : 'bg-slate-200 text-slate-400'
-                    }`}
-                  >
-                    {i + 1 < publishProgress.step ? '✓' : i + 1}
-                  </div>
-                ))}
-              </div>
-              <div className="relative h-2 bg-slate-200 rounded-full overflow-hidden">
-                <div
-                  className="absolute left-0 top-0 h-full bg-gradient-to-r from-orange-500 to-red-500 transition-all duration-500"
-                  style={{ width: `${((publishProgress.step - 1) / (publishProgress.totalSteps - 1)) * 100}%` }}
-                />
+                    className="absolute left-0 top-0 h-full bg-gradient-to-r from-orange-500 to-red-500 transition-all duration-500"
+                    style={{ width: `${Math.round((publishProgress.step / publishProgress.totalSteps) * 100)}%` }}
+                  />
+                </div>
+                <span className="ml-3 text-sm font-bold text-slate-600 min-w-[3rem] text-right">
+                  {Math.round((publishProgress.step / publishProgress.totalSteps) * 100)}%
+                </span>
               </div>
             </div>
             <div className="text-center">
-              <div className="flex items-center justify-center gap-2 mb-2">
+              <div className="flex items-center justify-center gap-2">
                 <svg className="animate-spin h-5 w-5 text-orange-500" viewBox="0 0 24 24">
                   <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
                   <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />

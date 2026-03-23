@@ -125,14 +125,14 @@ export function useBlogPublish(selectedAccount: string | null) {
           console.error('Status polling error:', statusResult.error);
           continue;
         }
-        const statusData = statusResult.data as { status: string; message: string; completed?: boolean; success?: boolean; result?: PublishResult; error?: string };
+        const statusData = statusResult.data as { status: string; message: string; step?: number; totalSteps?: number; completed?: boolean; success?: boolean; result?: PublishResult; error?: string };
 
-        const { step, totalSteps } = getStepFromStatus(statusData.status);
+        const fallback = getStepFromStatus(statusData.status);
         setPublishProgress({
           status: statusData.status,
           message: statusData.message,
-          step,
-          totalSteps,
+          step: statusData.step ?? fallback.step,
+          totalSteps: statusData.totalSteps ?? fallback.totalSteps,
         });
 
         if (statusData.completed) {
@@ -220,14 +220,14 @@ export function useBlogPublish(selectedAccount: string | null) {
           console.error('Status polling error:', statusResult.error);
           continue;
         }
-        const statusData = statusResult.data as { status: string; message: string; completed?: boolean; success?: boolean; result?: PublishResult; error?: string };
+        const statusData = statusResult.data as { status: string; message: string; step?: number; totalSteps?: number; completed?: boolean; success?: boolean; result?: PublishResult; error?: string };
 
-        const previewSteps: Record<string, number> = { 'pending': 1, 'publishing': 2, 'success': 3, 'failed': 3 };
+        const previewFallbackSteps: Record<string, number> = { 'pending': 1, 'publishing': 2, 'success': 3, 'failed': 3 };
         setPublishProgress({
           status: statusData.status,
           message: statusData.message,
-          step: previewSteps[statusData.status] || 1,
-          totalSteps: 3,
+          step: statusData.step ?? (previewFallbackSteps[statusData.status] || 1),
+          totalSteps: statusData.totalSteps ?? 3,
         });
 
         if (statusData.completed) {
