@@ -783,7 +783,7 @@ export async function publishToTistory(params: {
     const publishedUrl = page.url();
     console.log('Post published! URL:', publishedUrl);
 
-    await saveCookies(page);
+    await saveCookies(page, userEmail);
 
     return {
       success: true,
