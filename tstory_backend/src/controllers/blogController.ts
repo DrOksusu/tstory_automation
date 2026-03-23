@@ -96,6 +96,7 @@ export function getGenerateStatus(req: Request, res: Response): void {
   }
 
   const completed = ['success', 'failed'].includes(task.status);
+  const elapsedMs = Date.now() - task.startedAt;
 
   res.json({
     success: task.status === 'success',
@@ -106,6 +107,7 @@ export function getGenerateStatus(req: Request, res: Response): void {
     completed,
     result: task.result,
     error: task.error,
+    elapsedMs,
   });
 }
 
@@ -189,12 +191,14 @@ async function runGenerateTask(
       return;
     }
 
-    // 5. DB 업데이트
+    // 5. DB 업데이트 (durationMs 포함)
+    const durationMs = Date.now() - task.startedAt;
     await prisma.blogPost.update({
       where: { id: blogPost.id },
       data: {
         tistoryPostId: tistoryResult.postUrl,
         status: 'published',
+        durationMs,
       },
     });
 
@@ -207,7 +211,7 @@ async function runGenerateTask(
       title: generatedContent.title,
     };
 
-    console.log(`[${taskId}] Blog post published successfully:`, task.result);
+    console.log(`[${taskId}] Blog post published successfully (${durationMs}ms):`, task.result);
 
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : 'Unknown error';
@@ -340,12 +344,14 @@ async function runPublishContentTask(
       return;
     }
 
-    // 3. DB 업데이트
+    // 3. DB 업데이트 (durationMs 포함)
+    const durationMs = Date.now() - task.startedAt;
     await prisma.blogPost.update({
       where: { id: blogPost.id },
       data: {
         tistoryPostId: tistoryResult.postUrl,
         status: 'published',
+        durationMs,
       },
     });
 
@@ -358,7 +364,7 @@ async function runPublishContentTask(
       title: title,
     };
 
-    console.log(`[${taskId}] Edited content published successfully:`, task.result);
+    console.log(`[${taskId}] Edited content published successfully (${durationMs}ms):`, task.result);
 
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : 'Unknown error';
@@ -544,6 +550,45 @@ export async function getPosts(req: Request, res: Response): Promise<void> {
     res.status(500).json({
       success: false,
       error: 'Failed to get posts',
+    });
+  }
+}
+
+/**
+ * 발행 평균 소요시간 조회
+ * GET /api/blog/avg-duration
+ */
+export async function getAvgDuration(req: Request, res: Response): Promise<void> {
+  try {
+    const posts = await prisma.blogPost.findMany({
+      where: {
+        status: 'published',
+        durationMs: { not: null },
+      },
+      select: { durationMs: true },
+      orderBy: { createdAt: 'desc' },
+      take: 20,
+    });
+
+    const durations = posts
+      .map((p) => p.durationMs)
+      .filter((d): d is number => d !== null);
+
+    const count = durations.length;
+    const avgDurationMs = count > 0
+      ? Math.round(durations.reduce((sum, d) => sum + d, 0) / count)
+      : null;
+
+    res.json({
+      success: true,
+      avgDurationMs,
+      sampleCount: count,
+    });
+  } catch (error) {
+    console.error('Error getting avg duration:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to get avg duration',
     });
   }
 }

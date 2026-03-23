@@ -24,6 +24,8 @@ export interface PublishProgress {
   message: string;
   step: number;
   totalSteps: number;
+  elapsedMs?: number;
+  estimatedTotalMs?: number | null;
 }
 
 export interface AddAccountStatus {

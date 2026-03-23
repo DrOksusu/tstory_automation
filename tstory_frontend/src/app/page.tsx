@@ -9,6 +9,17 @@ import ResultModal from '@/components/ResultModal';
 import { useTistoryAccounts } from '@/hooks/useTistoryAccounts';
 import { useBlogPublish } from '@/hooks/useBlogPublish';
 
+// 밀리초를 "X분 Y초" 형식으로 변환
+function formatDuration(ms: number): string {
+  const totalSec = Math.round(ms / 1000);
+  const min = Math.floor(totalSec / 60);
+  const sec = totalSec % 60;
+  if (min > 0) {
+    return `${min}분 ${sec}초`;
+  }
+  return `${sec}초`;
+}
+
 export default function Home() {
   const { user, isLoading } = useAuth();
   const router = useRouter();
@@ -391,6 +402,19 @@ export default function Home() {
                   <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
                 </svg>
                 <span className="text-lg font-medium text-slate-700">{publishProgress.message}</span>
+              </div>
+              {/* 경과시간 / 예상시간 표시 */}
+              <div className="mt-4 space-y-1 text-sm text-slate-500">
+                {publishProgress.elapsedMs != null && (
+                  <p>경과: {formatDuration(publishProgress.elapsedMs)}</p>
+                )}
+                {publishProgress.estimatedTotalMs != null && publishProgress.elapsedMs != null ? (
+                  <p>
+                    예상 남은 시간: ~{formatDuration(Math.max(0, publishProgress.estimatedTotalMs - publishProgress.elapsedMs))}
+                  </p>
+                ) : publishProgress.elapsedMs != null ? (
+                  <p className="text-slate-400">예상 시간 수집 중...</p>
+                ) : null}
               </div>
             </div>
           </div>

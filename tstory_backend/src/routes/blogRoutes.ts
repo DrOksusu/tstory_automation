@@ -6,6 +6,7 @@ import {
   startGenerate,
   getGenerateStatus,
   startPublishContent,
+  getAvgDuration,
 } from '../controllers/blogController';
 import {
   createSchedule,
@@ -33,6 +34,9 @@ router.post('/publish-content', startPublishContent);
 
 // 생성된 글 목록 조회
 router.get('/posts', getPosts);
+
+// 발행 평균 소요시간 조회
+router.get('/avg-duration', getAvgDuration);
 
 // 예약 발행 CRUD
 router.post('/schedule', createSchedule);

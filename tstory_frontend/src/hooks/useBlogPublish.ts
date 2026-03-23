@@ -77,6 +77,20 @@ export function useBlogPublish(selectedAccount: string | null) {
     return { step: steps[status] || 1, totalSteps: 4 };
   };
 
+  // 평균 소요시간 가져오기
+  const fetchAvgDuration = async (): Promise<{ avgDurationMs: number | null; sampleCount: number }> => {
+    try {
+      const response = await fetch('/api/blog/avg-duration');
+      const data = await response.json();
+      if (data.success) {
+        return { avgDurationMs: data.avgDurationMs, sampleCount: data.sampleCount };
+      }
+    } catch (error) {
+      console.error('Failed to fetch avg duration:', error);
+    }
+    return { avgDurationMs: null, sampleCount: 0 };
+  };
+
   // 직접 발행 (미리보기 없이)
   const handlePublish = async () => {
     if (!selectedAccount) {
@@ -94,6 +108,10 @@ export function useBlogPublish(selectedAccount: string | null) {
     setPublishProgress({ status: 'pending', message: '발행 준비 중...', step: 1, totalSteps: 4 });
 
     try {
+      // 평균 소요시간 사전 조회
+      const { avgDurationMs, sampleCount } = await fetchAvgDuration();
+      const estimatedTotalMs = sampleCount >= 3 ? avgDurationMs : null;
+
       const startResponse = await fetch('/api/blog/start-generate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -125,7 +143,7 @@ export function useBlogPublish(selectedAccount: string | null) {
           console.error('Status polling error:', statusResult.error);
           continue;
         }
-        const statusData = statusResult.data as { status: string; message: string; step?: number; totalSteps?: number; completed?: boolean; success?: boolean; result?: PublishResult; error?: string };
+        const statusData = statusResult.data as { status: string; message: string; step?: number; totalSteps?: number; completed?: boolean; success?: boolean; result?: PublishResult; error?: string; elapsedMs?: number };
 
         const fallback = getStepFromStatus(statusData.status);
         setPublishProgress({
@@ -133,6 +151,8 @@ export function useBlogPublish(selectedAccount: string | null) {
           message: statusData.message,
           step: statusData.step ?? fallback.step,
           totalSteps: statusData.totalSteps ?? fallback.totalSteps,
+          elapsedMs: statusData.elapsedMs,
+          estimatedTotalMs,
         });
 
         if (statusData.completed) {
@@ -184,6 +204,10 @@ export function useBlogPublish(selectedAccount: string | null) {
     setPublishProgress({ status: 'pending', message: '발행 준비 중...', step: 1, totalSteps: 3 });
 
     try {
+      // 평균 소요시간 사전 조회
+      const { avgDurationMs, sampleCount } = await fetchAvgDuration();
+      const estimatedTotalMs = sampleCount >= 3 ? avgDurationMs : null;
+
       const startResponse = await fetch('/api/blog/publish-content', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -220,7 +244,7 @@ export function useBlogPublish(selectedAccount: string | null) {
           console.error('Status polling error:', statusResult.error);
           continue;
         }
-        const statusData = statusResult.data as { status: string; message: string; step?: number; totalSteps?: number; completed?: boolean; success?: boolean; result?: PublishResult; error?: string };
+        const statusData = statusResult.data as { status: string; message: string; step?: number; totalSteps?: number; completed?: boolean; success?: boolean; result?: PublishResult; error?: string; elapsedMs?: number };
 
         const previewFallbackSteps: Record<string, number> = { 'pending': 1, 'publishing': 2, 'success': 3, 'failed': 3 };
         setPublishProgress({
@@ -228,6 +252,8 @@ export function useBlogPublish(selectedAccount: string | null) {
           message: statusData.message,
           step: statusData.step ?? (previewFallbackSteps[statusData.status] || 1),
           totalSteps: statusData.totalSteps ?? 3,
+          elapsedMs: statusData.elapsedMs,
+          estimatedTotalMs,
         });
 
         if (statusData.completed) {
