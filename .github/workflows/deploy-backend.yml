@@ -81,6 +81,7 @@ jobs:
               -e TISTORY_BLOG_NAME="${{ secrets.TISTORY_BLOG_NAME }}" \
               -e PORT=3010 \
               -e NODE_ENV=production \
+              -e BROWSERBASE_ENABLED=true \
               -e BROWSERBASE_API_KEY="${{ secrets.BROWSERBASE_API_KEY }}" \
               -e BROWSERBASE_PROJECT_ID="${{ secrets.BROWSERBASE_PROJECT_ID }}" \
               -e AWS_ACCESS_KEY_ID="${{ secrets.AWS_ACCESS_KEY_ID }}" \
