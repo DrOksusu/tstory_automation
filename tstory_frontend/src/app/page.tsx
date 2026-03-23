@@ -361,6 +361,7 @@ export default function Home() {
           data={previewData}
           onClose={() => setPreviewData(null)}
           onPublish={handlePublishFromPreview}
+          userEmail={selectedAccount || undefined}
         />
       )}
 

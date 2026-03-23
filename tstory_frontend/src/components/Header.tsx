@@ -38,6 +38,9 @@ export default function Header() {
                 <a href="/posts" className="text-slate-600 hover:text-orange-500 font-medium transition-colors">
                   발행 목록
                 </a>
+                <a href="/schedule" className="text-slate-600 hover:text-orange-500 font-medium transition-colors">
+                  예약 관리
+                </a>
               </nav>
 
               {user && (

@@ -7,6 +7,12 @@ import {
   getGenerateStatus,
   startPublishContent,
 } from '../controllers/blogController';
+import {
+  createSchedule,
+  getSchedules,
+  updateSchedule,
+  deleteSchedule,
+} from '../controllers/scheduleController';
 
 const router = Router();
 
@@ -27,5 +33,11 @@ router.post('/publish-content', startPublishContent);
 
 // 생성된 글 목록 조회
 router.get('/posts', getPosts);
+
+// 예약 발행 CRUD
+router.post('/schedule', createSchedule);
+router.get('/schedule', getSchedules);
+router.patch('/schedule/:id', updateSchedule);
+router.delete('/schedule/:id', deleteSchedule);
 
 export default router;

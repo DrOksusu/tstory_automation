@@ -4,6 +4,7 @@ import { config } from './config';
 import blogRoutes from './routes/blogRoutes';
 import authRoutes from './routes/authRoutes';
 import uploadRoutes from './routes/uploadRoutes';
+import { startScheduler } from './services/scheduler';
 
 // Unhandled error handlers
 process.on('unhandledRejection', (reason, promise) => {
@@ -77,6 +78,9 @@ const server = app.listen(PORT, '0.0.0.0', () => {
   console.log(`Browserbase enabled: ${config.browserbase?.enabled}`);
   console.log(`Browserbase API Key: ${config.browserbase?.apiKey ? 'SET' : 'NOT SET'}`);
   console.log(`Browserbase Project ID: ${config.browserbase?.projectId ? 'SET' : 'NOT SET'}`);
+
+  // 예약 발행 스케줄러 시작
+  startScheduler();
 });
 
 server.on('error', (error) => {

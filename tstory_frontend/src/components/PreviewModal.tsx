@@ -12,6 +12,7 @@ interface PreviewModalProps {
   data: PreviewData;
   onClose: () => void;
   onPublish: (editedData: PreviewData) => void;
+  userEmail?: string;
 }
 
 interface SelectedImage {
@@ -19,7 +20,7 @@ interface SelectedImage {
   rect: DOMRect | null;
 }
 
-export default function PreviewModal({ data, onClose, onPublish }: PreviewModalProps) {
+export default function PreviewModal({ data, onClose, onPublish, userEmail }: PreviewModalProps) {
   const [editedData, setEditedData] = useState<PreviewData>({
     title: data.title,
     metaDescription: data.metaDescription,
@@ -31,6 +32,9 @@ export default function PreviewModal({ data, onClose, onPublish }: PreviewModalP
     element: null,
     rect: null,
   });
+  const [showSchedulePicker, setShowSchedulePicker] = useState(false);
+  const [scheduleDate, setScheduleDate] = useState('');
+  const [isScheduling, setIsScheduling] = useState(false);
   const contentRef = useRef<HTMLDivElement>(null);
   // 드롭 위치를 저장 (리렌더링 영향 없음)
   const dropRangeRef = useRef<Range | null>(null);
@@ -653,22 +657,88 @@ export default function PreviewModal({ data, onClose, onPublish }: PreviewModalP
           </div>
 
           {/* 푸터 */}
-          <div className="sticky bottom-0 bg-white border-t border-slate-200 px-6 py-4 flex items-center justify-end gap-3">
-            <button
-              onClick={onClose}
-              className="px-5 py-2.5 text-slate-700 font-medium hover:bg-slate-100 rounded-xl transition-colors"
-            >
-              닫기
-            </button>
-            <button
-              onClick={handlePublishClick}
-              className="px-5 py-2.5 bg-gradient-to-r from-orange-500 to-red-500 text-white font-medium rounded-xl hover:from-orange-600 hover:to-red-600 transition-all shadow-lg shadow-orange-500/25 flex items-center gap-2"
-            >
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
-              </svg>
-              티스토리에 발행
-            </button>
+          <div className="sticky bottom-0 bg-white border-t border-slate-200 px-6 py-4">
+            <div className="flex items-center justify-between">
+              <button
+                onClick={onClose}
+                className="px-5 py-2.5 text-slate-700 font-medium hover:bg-slate-100 rounded-xl transition-colors"
+              >
+                닫기
+              </button>
+              <div className="flex items-center gap-3">
+                <div className="relative">
+                  <button
+                    onClick={() => setShowSchedulePicker(!showSchedulePicker)}
+                    className="px-5 py-2.5 border border-slate-300 text-slate-700 font-medium rounded-xl hover:bg-slate-50 transition-colors flex items-center gap-2"
+                  >
+                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                    </svg>
+                    예약 발행
+                  </button>
+                  {showSchedulePicker && (
+                    <div className="absolute bottom-full right-0 mb-2 bg-white border border-slate-200 rounded-xl shadow-lg p-4 z-50 w-72">
+                      <p className="text-sm font-medium text-slate-700 mb-2">예약 시각 선택</p>
+                      <input
+                        type="datetime-local"
+                        value={scheduleDate}
+                        onChange={(e) => setScheduleDate(e.target.value)}
+                        min={new Date().toISOString().slice(0, 16)}
+                        className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm mb-3"
+                      />
+                      <button
+                        onClick={async () => {
+                          if (!scheduleDate) {
+                            alert('예약 시각을 선택해주세요.');
+                            return;
+                          }
+                          setIsScheduling(true);
+                          try {
+                            const currentContent = contentRef.current?.innerHTML || editedData.content;
+                            const res = await fetch(`${API_URL}/api/blog/schedule`, {
+                              method: 'POST',
+                              headers: { 'Content-Type': 'application/json' },
+                              body: JSON.stringify({
+                                title: editedData.title,
+                                content: currentContent,
+                                tag: '',
+                                userEmail: userEmail || '',
+                                scheduledAt: new Date(scheduleDate).toISOString(),
+                              }),
+                            });
+                            const data = await res.json();
+                            if (data.success) {
+                              alert(`예약 등록 완료! ${new Date(scheduleDate).toLocaleString('ko-KR')}에 발행됩니다.`);
+                              setShowSchedulePicker(false);
+                              onClose();
+                            } else {
+                              alert(`예약 실패: ${data.error}`);
+                            }
+                          } catch (error) {
+                            alert('예약 등록 중 오류가 발생했습니다.');
+                          } finally {
+                            setIsScheduling(false);
+                          }
+                        }}
+                        disabled={isScheduling || !scheduleDate}
+                        className="w-full px-4 py-2 bg-blue-500 text-white font-medium rounded-lg hover:bg-blue-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed text-sm"
+                      >
+                        {isScheduling ? '등록 중...' : '예약 등록'}
+                      </button>
+                    </div>
+                  )}
+                </div>
+                <button
+                  onClick={handlePublishClick}
+                  className="px-5 py-2.5 bg-gradient-to-r from-orange-500 to-red-500 text-white font-medium rounded-xl hover:from-orange-600 hover:to-red-600 transition-all shadow-lg shadow-orange-500/25 flex items-center gap-2"
+                >
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+                  </svg>
+                  티스토리에 발행
+                </button>
+              </div>
+            </div>
           </div>
         </div>
       </div>

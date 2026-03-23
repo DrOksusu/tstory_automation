@@ -51,3 +51,21 @@ model TistoryCookie {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 }
+
+// 예약 발행 글
+model ScheduledPost {
+  id           Int      @id @default(autoincrement())
+  title        String   @db.VarChar(255)
+  content      String   @db.LongText
+  tag          String?  @db.VarChar(255)
+  userEmail    String   @db.VarChar(255)
+  scheduledAt  DateTime
+  status       String   @default("scheduled") @db.VarChar(50) // scheduled, publishing, published, failed, cancelled
+  errorMessage String?  @db.Text
+  tistoryUrl   String?  @db.VarChar(500)
+  blogPostId   Int?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@index([status, scheduledAt])
+}
