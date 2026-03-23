@@ -381,7 +381,9 @@ export default function Home() {
         <div className="fixed inset-0 z-50 flex items-center justify-center">
           <div className="fixed inset-0 bg-black/50 backdrop-blur-sm" />
           <div className="relative bg-white rounded-2xl shadow-2xl p-8 max-w-md w-full mx-4">
-            <h3 className="text-xl font-bold text-slate-800 text-center mb-6">발행 진행 중</h3>
+            <h3 className="text-xl font-bold text-slate-800 text-center mb-6">
+              {loadingType === 'preview' ? 'AI 글 생성 중' : '발행 진행 중'}
+            </h3>
             <div className="mb-6">
               <div className="flex items-center justify-between mb-2">
                 <div className="relative flex-1 h-3 bg-slate-200 rounded-full overflow-hidden">

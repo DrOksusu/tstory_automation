@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { safeJsonParse } from '../utils/api';
 import type { PreviewData, PublishResult, PublishProgress } from '../types/blog';
+// PreviewData는 폴링 결과에서도 사용됨
 
 export function useBlogPublish(selectedAccount: string | null) {
   const [loading, setLoading] = useState(false);
@@ -16,7 +17,7 @@ export function useBlogPublish(selectedAccount: string | null) {
     regionKeyword: '',
   });
 
-  // 미리보기 요청
+  // 미리보기 요청 (폴링 방식)
   const handlePreview = async () => {
     if (!formData.sourceUrl || !formData.mainKeyword || !formData.regionKeyword) {
       alert('모든 필드를 입력해주세요.');
@@ -25,38 +26,78 @@ export function useBlogPublish(selectedAccount: string | null) {
 
     setLoading(true);
     setLoadingType('preview');
+    setPublishProgress({ status: 'pending', message: '미리보기 준비 중...', step: 1, totalSteps: 4 });
 
     try {
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 180000);
+      // 평균 소요시간 사전 조회
+      const { avgDurationMs, sampleCount } = await fetchAvgDuration('preview');
+      const estimatedTotalMs = sampleCount >= 3 ? avgDurationMs : null;
 
-      const response = await fetch('/api/blog/preview', {
+      const startResponse = await fetch('/api/blog/start-preview', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(formData),
-        signal: controller.signal,
       });
 
-      clearTimeout(timeoutId);
-
-      const contentType = response.headers.get('content-type');
-      if (!contentType || !contentType.includes('application/json')) {
-        const text = await response.text();
-        throw new Error(`서버 오류: ${text || response.statusText}`);
+      const startResult = await safeJsonParse(startResponse);
+      if (!startResult.ok || !startResult.data) {
+        throw new Error(startResult.error || '미리보기 시작에 실패했습니다.');
       }
 
-      const data = await response.json();
+      const startData = startResult.data as { taskId?: string };
+      const { taskId } = startData;
 
-      if (data.success) {
-        setPreviewData(data);
-      } else {
-        alert(`미리보기 실패: ${data.error}`);
+      if (!taskId) {
+        throw new Error('작업 ID를 받지 못했습니다.');
       }
+
+      const maxPollingTime = 300000;
+      const pollingInterval = 2000;
+      const startTime = Date.now();
+
+      while (Date.now() - startTime < maxPollingTime) {
+        await new Promise((resolve) => setTimeout(resolve, pollingInterval));
+
+        const statusResponse = await fetch(`/api/blog/status/${taskId}`);
+        const statusResult = await safeJsonParse(statusResponse);
+        if (!statusResult.ok || !statusResult.data) {
+          console.error('Status polling error:', statusResult.error);
+          continue;
+        }
+        const statusData = statusResult.data as {
+          status: string; message: string; step?: number; totalSteps?: number;
+          completed?: boolean; success?: boolean; previewResult?: PreviewData;
+          error?: string; elapsedMs?: number;
+        };
+
+        setPublishProgress({
+          status: statusData.status,
+          message: statusData.message,
+          step: statusData.step ?? 1,
+          totalSteps: statusData.totalSteps ?? 4,
+          elapsedMs: statusData.elapsedMs,
+          estimatedTotalMs,
+        });
+
+        if (statusData.completed) {
+          setPublishProgress(null);
+          if (statusData.success && statusData.previewResult) {
+            setPreviewData(statusData.previewResult);
+          } else {
+            alert(`미리보기 실패: ${statusData.error || statusData.message}`);
+          }
+          return;
+        }
+      }
+
+      setPublishProgress(null);
+      alert('미리보기 시간 초과 (5분).');
     } catch (error) {
       let message = '서버 연결에 실패했습니다.';
       if (error instanceof Error) {
-        message = error.name === 'AbortError' ? '요청 시간이 초과되었습니다.' : error.message;
+        message = error.message;
       }
+      setPublishProgress(null);
       alert(message);
       console.error(error);
     } finally {
@@ -78,9 +119,10 @@ export function useBlogPublish(selectedAccount: string | null) {
   };
 
   // 평균 소요시간 가져오기
-  const fetchAvgDuration = async (): Promise<{ avgDurationMs: number | null; sampleCount: number }> => {
+  const fetchAvgDuration = async (type?: 'preview' | 'publish'): Promise<{ avgDurationMs: number | null; sampleCount: number }> => {
     try {
-      const response = await fetch('/api/blog/avg-duration');
+      const query = type ? `?type=${type}` : '';
+      const response = await fetch(`/api/blog/avg-duration${query}`);
       const data = await response.json();
       if (data.success) {
         return { avgDurationMs: data.avgDurationMs, sampleCount: data.sampleCount };

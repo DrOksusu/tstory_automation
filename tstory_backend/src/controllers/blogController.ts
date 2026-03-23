@@ -7,6 +7,12 @@ import { GenerateBlogRequest, BlogGenerationResult } from '../types';
 
 // ==================== 폴링 기반 발행 작업 관리 ====================
 
+interface PreviewResult {
+  title: string;
+  metaDescription: string;
+  content: string;
+}
+
 interface GenerateTask {
   id: string;
   status: 'pending' | 'generating' | 'publishing' | 'success' | 'failed';
@@ -14,6 +20,7 @@ interface GenerateTask {
   step: number;
   totalSteps: number;
   result?: BlogGenerationResult;
+  previewResult?: PreviewResult;
   error?: string;
   startedAt: number;
 }
@@ -106,6 +113,7 @@ export function getGenerateStatus(req: Request, res: Response): void {
     totalSteps: task.totalSteps,
     completed,
     result: task.result,
+    previewResult: task.previewResult,
     error: task.error,
     elapsedMs,
   });
@@ -531,6 +539,140 @@ export async function generatePreview(
 }
 
 /**
+ * 미리보기 작업 시작 (폴링 방식)
+ * POST /api/blog/start-preview
+ */
+export async function startPreview(
+  req: Request<object, object, GenerateBlogRequest>,
+  res: Response
+): Promise<void> {
+  const { sourceUrl, mainKeyword, regionKeyword, aiModel } = req.body;
+
+  if (!sourceUrl || !mainKeyword || !regionKeyword) {
+    res.status(400).json({
+      success: false,
+      error: '필수 입력값이 누락되었습니다. (sourceUrl, mainKeyword, regionKeyword)',
+    });
+    return;
+  }
+
+  const taskId = generateTaskId();
+
+  const task: GenerateTask = {
+    id: taskId,
+    status: 'pending',
+    message: '미리보기 작업을 시작하는 중...',
+    step: 1,
+    totalSteps: 4,
+    startedAt: Date.now(),
+  };
+
+  generateTasks.set(taskId, task);
+
+  // 백그라운드에서 미리보기 작업 실행
+  runPreviewTask(taskId, sourceUrl, mainKeyword, regionKeyword, aiModel).catch((error) => {
+    console.error(`Preview task error for ${taskId}:`, error);
+    const t = generateTasks.get(taskId);
+    if (t) {
+      t.status = 'failed';
+      t.message = error instanceof Error ? error.message : 'Unknown error';
+      t.error = t.message;
+    }
+  });
+
+  res.json({
+    success: true,
+    taskId,
+    message: '미리보기 작업이 시작되었습니다.',
+  });
+}
+
+/**
+ * 백그라운드 미리보기 작업
+ */
+async function runPreviewTask(
+  taskId: string,
+  sourceUrl: string,
+  mainKeyword: string,
+  regionKeyword: string,
+  aiModel?: 'gemini' | 'claude'
+): Promise<void> {
+  const task = generateTasks.get(taskId);
+  if (!task) return;
+
+  try {
+    // step 1/4: 참고 URL 스크래핑
+    task.step = 1;
+    task.status = 'generating';
+    task.message = '참고 URL 스크래핑 중...';
+    console.log(`[${taskId}] Preview: scraping source URL...`);
+
+    // step 2/4: AI 글 생성
+    task.step = 2;
+    const modelName = aiModel || 'claude';
+    task.message = `AI(${modelName})가 글을 생성하는 중...`;
+    console.log(`[${taskId}] Preview: generating content with ${modelName}...`);
+
+    const generatedContent = await generateBlogContent(
+      sourceUrl,
+      mainKeyword,
+      regionKeyword,
+      modelName
+    );
+
+    // step 3/4: HTML 후처리
+    task.step = 3;
+    task.message = 'HTML 후처리 중...';
+    console.log(`[${taskId}] Preview: processing HTML...`);
+
+    const cleanedContent = cleanHtml(generatedContent.content);
+    const cleanedMetaDesc = cleanMetaDescription(generatedContent.metaDescription);
+
+    // step 4/4: 완료
+    const durationMs = Date.now() - task.startedAt;
+    task.step = 4;
+    task.status = 'success';
+    task.message = 'AI 글 생성 완료!';
+    task.previewResult = {
+      title: generatedContent.title,
+      metaDescription: cleanedMetaDesc,
+      content: cleanedContent,
+    };
+
+    console.log(`[${taskId}] Preview completed (${durationMs}ms)`);
+
+    // previewDurationMs DB 기록 (최근 글 또는 새 레코드)
+    try {
+      await prisma.blogPost.create({
+        data: {
+          sourceUrl,
+          mainKeyword,
+          regionKeyword,
+          title: generatedContent.title,
+          content: cleanedContent,
+          status: 'created',
+          previewDurationMs: durationMs,
+        },
+      });
+    } catch (dbError) {
+      console.error(`[${taskId}] Failed to save preview duration:`, dbError);
+    }
+
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+    console.error(`[${taskId}] Preview error:`, errorMessage);
+    task.status = 'failed';
+    task.message = errorMessage;
+    task.error = errorMessage;
+  } finally {
+    // 30분 후 작업 정리
+    setTimeout(() => {
+      generateTasks.delete(taskId);
+    }, 1800000);
+  }
+}
+
+/**
  * 생성된 글 목록 조회
  * GET /api/blog/posts
  */
@@ -560,18 +702,20 @@ export async function getPosts(req: Request, res: Response): Promise<void> {
  */
 export async function getAvgDuration(req: Request, res: Response): Promise<void> {
   try {
+    const type = req.query.type as string | undefined;
+    const isPreview = type === 'preview';
+
     const posts = await prisma.blogPost.findMany({
-      where: {
-        status: 'published',
-        durationMs: { not: null },
-      },
-      select: { durationMs: true },
+      where: isPreview
+        ? { previewDurationMs: { not: null } }
+        : { status: 'published', durationMs: { not: null } },
+      select: isPreview ? { previewDurationMs: true } : { durationMs: true },
       orderBy: { createdAt: 'desc' },
       take: 20,
     });
 
     const durations = posts
-      .map((p) => p.durationMs)
+      .map((p) => isPreview ? (p as { previewDurationMs: number | null }).previewDurationMs : (p as { durationMs: number | null }).durationMs)
       .filter((d): d is number => d !== null);
 
     const count = durations.length;

@@ -6,6 +6,7 @@ import {
   startGenerate,
   getGenerateStatus,
   startPublishContent,
+  startPreview,
   getAvgDuration,
 } from '../controllers/blogController';
 import {
@@ -26,8 +27,11 @@ router.post('/start-generate', startGenerate);
 // 발행 작업 상태 확인 (폴링)
 router.get('/status/:taskId', getGenerateStatus);
 
-// 미리보기 (발행하지 않음)
+// 미리보기 (발행하지 않음) - 동기 방식 (레거시)
 router.post('/preview', generatePreview);
+
+// 미리보기 시작 (폴링 방식)
+router.post('/start-preview', startPreview);
 
 // 편집된 글 직접 발행 (폴링 방식)
 router.post('/publish-content', startPublishContent);
