@@ -39,6 +39,9 @@ RUN npm run build
 # 쿠키 저장용 디렉토리 생성
 RUN mkdir -p /app/cookies
 
+# 브라우저 프로필 저장용 디렉토리 생성 (카카오 2FA 우회)
+RUN mkdir -p /app/browser-profiles
+
 # 포트 설정
 EXPOSE 3020
 

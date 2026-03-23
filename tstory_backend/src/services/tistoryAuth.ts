@@ -7,6 +7,7 @@ import { loadCookies, saveCookies, getAllAccounts } from './tistoryCookieManager
 import { connectToBrowserbase } from './browserbaseConnector';
 import { delay } from './tistoryUtils';
 import { LoginSession } from '../types';
+import { getUserDataDir } from '../utils/browserProfile';
 
 // 활성 로그인 세션 저장소
 const loginSessions = new Map<string, LoginSession>();
@@ -284,6 +285,7 @@ export async function testLogin(credentials?: { email: string; password: string 
       console.log('[testLogin] Launching local Puppeteer (headless)...');
       browser = await puppeteer.launch({
         headless: true,
+        userDataDir: getUserDataDir(credentials.email),
         args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage'],
       });
     }
@@ -345,6 +347,7 @@ export async function manualLogin(): Promise<{ success: boolean; message: string
 
     browser = await puppeteer.launch({
       headless: false,
+      userDataDir: getUserDataDir(),
       args: [
         '--no-sandbox',
         '--disable-setuid-sandbox',
@@ -573,6 +576,7 @@ async function runLoginProcess(sessionId: string): Promise<void> {
 
     browser = await puppeteer.launch({
       headless: false,
+      userDataDir: getUserDataDir(session.userEmail),
       args: [
         '--no-sandbox',
         '--disable-setuid-sandbox',

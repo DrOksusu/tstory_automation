@@ -29,6 +29,9 @@ Thumbs.db
 cookies/
 *.cookies.json
 
+# Browser profiles (카카오 로그인 세션 데이터)
+browser-profiles/
+
 # Debug screenshots
 *.png
 

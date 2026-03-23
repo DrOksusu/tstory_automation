@@ -8,6 +8,7 @@ import { loadCookies, saveCookies } from './tistoryCookieManager';
 import { isLoggedIn, loginToTistory } from './tistoryAuth';
 import { connectToBrowserbase } from './browserbaseConnector';
 import { delay } from './tistoryUtils';
+import { getUserDataDir } from '../utils/browserProfile';
 
 /**
  * 티스토리에 글 발행 (Puppeteer)
@@ -41,6 +42,7 @@ export async function publishToTistory(params: {
 
       browser = await puppeteer.launch({
         headless: isHeadless,
+        userDataDir: getUserDataDir(userEmail),
         executablePath: process.env.PUPPETEER_EXECUTABLE_PATH || undefined,
         args: [
           '--no-sandbox',
