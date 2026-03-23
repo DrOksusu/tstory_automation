@@ -18,14 +18,21 @@ export async function publishToTistory(params: {
   content: string;
   tag?: string;
   userEmail?: string;
+  onProgress?: (message: string) => void;
 }): Promise<TistoryPublishResult> {
-  const { title, content, tag, userEmail } = params;
+  const { title, content, tag, userEmail, onProgress } = params;
+
+  // 진행 상태 리포터
+  const report = (msg: string) => {
+    console.log(msg);
+    onProgress?.(msg);
+  };
 
   let browser: Browser | null = null;
   let useBrowserbase = false;
 
   try {
-    console.log('Launching browser...');
+    report('브라우저를 실행하는 중...');
 
     // Browserbase 사용 여부 확인 (프로덕션에서 API 키가 있으면 사용)
     useBrowserbase = config.browserbase.enabled && process.env.NODE_ENV === 'production';
@@ -74,6 +81,7 @@ export async function publishToTistory(params: {
     );
 
     // 쿠키 로드 시도
+    report('로그인 상태 확인 중...');
     const cookiesLoaded = await loadCookies(page, userEmail);
     console.log(`Cookies loaded: ${cookiesLoaded} (user: ${userEmail || 'none'})`);
 
@@ -90,7 +98,7 @@ export async function publishToTistory(params: {
       }
 
       // 로컬 환경에서는 자동 로그인 시도
-      console.log('Attempting auto-login...');
+      report('자동 로그인 시도 중...');
       const loginSuccess = await loginToTistory(page);
       if (!loginSuccess) {
         throw new Error('자동 로그인에 실패했습니다. 수동으로 로그인해주세요.');
@@ -98,7 +106,7 @@ export async function publishToTistory(params: {
     }
 
     // 글쓰기 페이지로 이동
-    console.log('Navigating to write page...');
+    report('글쓰기 페이지로 이동 중...');
 
     // "이어서 작성하시겠습니까?" 다이얼로그 핸들러 등록 (페이지 이동 전에 설정해야 함)
     page.on('dialog', async (dialog) => {
@@ -172,7 +180,7 @@ export async function publishToTistory(params: {
     }
 
     // 페이지 로드 대기 (새 에디터 UI 대응)
-    console.log('Waiting for editor to load...');
+    report('에디터 로드 대기 중...');
     await delay(5000); // 페이지 초기 로딩 대기 (5초로 증가)
 
     // 디버깅용 스크린샷 저장
@@ -214,6 +222,7 @@ export async function publishToTistory(params: {
     }
 
     // 제목 입력
+    report('제목을 입력하는 중...');
     console.log('========== STEP 1: 제목 입력 ==========');
     const titleSelectors = [
       'input[name="title"]',
@@ -278,6 +287,7 @@ export async function publishToTistory(params: {
     }
 
     // 본문 입력
+    report('본문을 입력하는 중...');
     console.log('========== STEP 2: 본문 입력 ==========');
     console.log('Content length:', content.length, 'characters');
     console.log('Content preview (first 500 chars):', content.substring(0, 500));
@@ -647,6 +657,7 @@ export async function publishToTistory(params: {
     console.log('Screenshot saved: step3-before-publish.png');
 
     // 발행 버튼 클릭
+    report('발행 버튼 클릭 중...');
     console.log('========== STEP 4: 발행 버튼 클릭 ==========');
     await delay(1000);
 
@@ -760,6 +771,7 @@ export async function publishToTistory(params: {
     }
 
     // 발행 완료 대기
+    report('발행 완료 확인 중...');
     await delay(3000);
 
     // 발행된 글 URL 확인

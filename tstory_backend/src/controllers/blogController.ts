@@ -160,6 +160,7 @@ async function runGenerateTask(
       content: cleanedContent,
       tag: `${mainKeyword},${regionKeyword}`,
       userEmail,
+      onProgress: (msg) => { task.message = msg; },
     });
 
     if (!tistoryResult.success) {
@@ -302,6 +303,7 @@ async function runPublishContentTask(
       content: content,
       tag: '',
       userEmail,
+      onProgress: (msg) => { task.message = msg; },
     });
 
     if (!tistoryResult.success) {
