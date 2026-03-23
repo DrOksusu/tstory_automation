@@ -7,7 +7,7 @@ import { loadCookies, saveCookies, getAllAccounts } from './tistoryCookieManager
 import { connectToBrowserbase } from './browserbaseConnector';
 import { delay } from './tistoryUtils';
 import { LoginSession } from '../types';
-import { getUserDataDir } from '../utils/browserProfile';
+import { getUserDataDir, closeExistingBrowser, registerBrowser, unregisterBrowser } from '../utils/browserProfile';
 
 // 활성 로그인 세션 저장소
 const loginSessions = new Map<string, LoginSession>();
@@ -283,11 +283,14 @@ export async function testLogin(credentials?: { email: string; password: string 
     } else {
       // 로컬 Puppeteer - headless 모드로 실행 (자동 로그인은 화면 불필요)
       console.log('[testLogin] Launching local Puppeteer (headless)...');
+      const profileDir = getUserDataDir(credentials.email);
+      await closeExistingBrowser(profileDir);
       browser = await puppeteer.launch({
         headless: true,
-        userDataDir: getUserDataDir(credentials.email),
+        userDataDir: profileDir,
         args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage'],
       });
+      registerBrowser(profileDir, browser);
     }
 
     const page = await browser.newPage();
@@ -329,7 +332,9 @@ export async function testLogin(credentials?: { email: string; password: string 
   } finally {
     if (browser) {
       console.log('[testLogin] Closing browser...');
+      const profileDir = getUserDataDir(credentials?.email);
       await browser.close();
+      unregisterBrowser(profileDir);
     }
   }
 }
@@ -345,9 +350,11 @@ export async function manualLogin(): Promise<{ success: boolean; message: string
     console.log('Please complete the login (including 2FA) in the browser window.');
     console.log('The browser will close automatically after login is detected.');
 
+    const profileDir = getUserDataDir();
+    await closeExistingBrowser(profileDir);
     browser = await puppeteer.launch({
       headless: false,
-      userDataDir: getUserDataDir(),
+      userDataDir: profileDir,
       args: [
         '--no-sandbox',
         '--disable-setuid-sandbox',
@@ -358,6 +365,7 @@ export async function manualLogin(): Promise<{ success: boolean; message: string
       defaultViewport: null,
       ignoreDefaultArgs: ['--enable-automation'],
     });
+    registerBrowser(profileDir, browser);
 
     // 자동화 감지 방지
     const page = await browser.newPage();
@@ -433,7 +441,9 @@ export async function manualLogin(): Promise<{ success: boolean; message: string
   } finally {
     if (browser) {
       console.log('Closing browser...');
+      const profileDir = getUserDataDir();
       await browser.close();
+      unregisterBrowser(profileDir);
     }
   }
 }
@@ -574,9 +584,11 @@ async function runLoginProcess(sessionId: string): Promise<void> {
     session.status = 'in_progress';
     session.message = '브라우저를 여는 중...';
 
+    const profileDir = getUserDataDir(session.userEmail);
+    await closeExistingBrowser(profileDir);
     browser = await puppeteer.launch({
       headless: false,
-      userDataDir: getUserDataDir(session.userEmail),
+      userDataDir: profileDir,
       args: [
         '--no-sandbox',
         '--disable-setuid-sandbox',
@@ -587,6 +599,7 @@ async function runLoginProcess(sessionId: string): Promise<void> {
       defaultViewport: null,
       ignoreDefaultArgs: ['--enable-automation'],
     });
+    registerBrowser(profileDir, browser);
 
     session.browser = browser;
 
@@ -701,11 +714,13 @@ async function runLoginProcess(sessionId: string): Promise<void> {
   } finally {
     if (browser) {
       console.log(`[${sessionId}] Closing browser...`);
+      const profileDir = getUserDataDir(session.userEmail);
       try {
         await browser.close();
       } catch (e) {
         console.error(`[${sessionId}] Error closing browser:`, e);
       }
+      unregisterBrowser(profileDir);
     }
     session.browser = null;
 

@@ -8,7 +8,7 @@ import { loadCookies, saveCookies } from './tistoryCookieManager';
 import { isLoggedIn, loginToTistory } from './tistoryAuth';
 import { connectToBrowserbase } from './browserbaseConnector';
 import { delay } from './tistoryUtils';
-import { getUserDataDir } from '../utils/browserProfile';
+import { getUserDataDir, closeExistingBrowser, registerBrowser, unregisterBrowser } from '../utils/browserProfile';
 
 /**
  * 티스토리에 글 발행 (Puppeteer)
@@ -47,9 +47,13 @@ export async function publishToTistory(params: {
       const isHeadless = process.env.HEADLESS === 'true' || process.env.NODE_ENV === 'production';
       console.log(`Puppeteer launch starting... (headless: ${isHeadless})`);
 
+      // 동일 프로필로 실행 중인 브라우저가 있으면 먼저 종료
+      const profileDir = getUserDataDir(userEmail);
+      await closeExistingBrowser(profileDir);
+
       browser = await puppeteer.launch({
         headless: isHeadless,
-        userDataDir: getUserDataDir(userEmail),
+        userDataDir: profileDir,
         executablePath: process.env.PUPPETEER_EXECUTABLE_PATH || undefined,
         args: [
           '--no-sandbox',
@@ -66,6 +70,7 @@ export async function publishToTistory(params: {
       });
 
       console.log('Browser launched successfully');
+      registerBrowser(profileDir, browser);
     }
 
     if (!browser) {
@@ -795,10 +800,12 @@ export async function publishToTistory(params: {
     };
   } finally {
     if (browser) {
+      const profileDir = getUserDataDir(userEmail);
       if (useBrowserbase) {
         browser.disconnect();
       } else {
         await browser.close();
+        unregisterBrowser(profileDir);
       }
     }
   }
