@@ -5,20 +5,21 @@ import { Page } from 'puppeteer';
 import prisma from './prismaClient';
 
 /**
- * 저장된 쿠키 로드 (DB에서) - 유저 이메일 기반
+ * 저장된 쿠키 로드 (DB에서) - 유저 이메일 + 소유자 기반
  */
-export async function loadCookies(page: Page, userEmail?: string): Promise<boolean> {
+export async function loadCookies(page: Page, userEmail?: string, ownerEmail?: string): Promise<boolean> {
   try {
-    // userEmail이 없으면 쿠키 로드 불가
     if (!userEmail) {
       console.log('No user email provided, cannot load cookies');
       return false;
     }
 
-    console.log(`Loading cookies from database for user: ${userEmail}...`);
+    // ownerEmail이 없으면 userEmail을 기본값으로 사용 (하위 호환)
+    const owner = ownerEmail || userEmail;
+    console.log(`Loading cookies from database for user: ${userEmail}, owner: ${owner}...`);
 
     const cookieRecord = await prisma.tistoryCookie.findUnique({
-      where: { userEmail },
+      where: { ownerEmail_userEmail: { ownerEmail: owner, userEmail } },
     });
 
     if (cookieRecord) {
@@ -44,16 +45,18 @@ export async function loadCookies(page: Page, userEmail?: string): Promise<boole
 }
 
 /**
- * 쿠키 저장 (DB에) - 유저 이메일 기반
+ * 쿠키 저장 (DB에) - 유저 이메일 + 소유자 기반
  */
-export async function saveCookies(page: Page, userEmail?: string): Promise<boolean> {
+export async function saveCookies(page: Page, userEmail?: string, ownerEmail?: string): Promise<boolean> {
   try {
     if (!userEmail) {
       console.log('[saveCookies] No user email provided, cannot save cookies');
       return false;
     }
 
-    console.log(`[saveCookies] Getting cookies for user: ${userEmail}`);
+    // ownerEmail이 없으면 userEmail을 기본값으로 사용 (하위 호환)
+    const owner = ownerEmail || userEmail;
+    console.log(`[saveCookies] Getting cookies for user: ${userEmail}, owner: ${owner}`);
     const cookies = await page.cookies();
     console.log(`[saveCookies] Got ${cookies.length} cookies from browser`);
 
@@ -73,12 +76,12 @@ export async function saveCookies(page: Page, userEmail?: string): Promise<boole
 
     console.log(`[saveCookies] Upserting to database...`);
     const result = await prisma.tistoryCookie.upsert({
-      where: { userEmail },
+      where: { ownerEmail_userEmail: { ownerEmail: owner, userEmail } },
       update: { cookies: cookiesJson },
-      create: { userEmail, cookies: cookiesJson },
+      create: { ownerEmail: owner, userEmail, cookies: cookiesJson },
     });
 
-    console.log(`[saveCookies] SUCCESS! Saved to DB for user: ${userEmail}, record id: ${result.id}`);
+    console.log(`[saveCookies] SUCCESS! Saved to DB for user: ${userEmail}, owner: ${owner}, record id: ${result.id}`);
     return true;
   } catch (error) {
     console.error('[saveCookies] FAILED to save cookies to DB:');
@@ -92,14 +95,14 @@ export async function saveCookies(page: Page, userEmail?: string): Promise<boole
 }
 
 /**
- * 저장된 쿠키 존재 여부 확인 (DB) - 유저 이메일 기반
+ * 저장된 쿠키 존재 여부 확인 (DB) - 유저 이메일 + 소유자 기반
  */
-export async function checkCookiesExist(userEmail?: string): Promise<{ exists: boolean; userEmail?: string; savedAt?: Date }> {
+export async function checkCookiesExist(userEmail?: string, ownerEmail?: string): Promise<{ exists: boolean; userEmail?: string; savedAt?: Date }> {
   try {
     if (!userEmail) {
       console.log('No user email provided, checking all cookies...');
-      // 이메일이 없으면 저장된 쿠키가 있는지만 확인
-      const anyCookie = await prisma.tistoryCookie.findFirst();
+      const whereClause = ownerEmail ? { ownerEmail } : {};
+      const anyCookie = await prisma.tistoryCookie.findFirst({ where: whereClause });
       if (anyCookie) {
         return {
           exists: true,
@@ -110,8 +113,9 @@ export async function checkCookiesExist(userEmail?: string): Promise<{ exists: b
       return { exists: false };
     }
 
+    const owner = ownerEmail || userEmail;
     const savedCookie = await prisma.tistoryCookie.findUnique({
-      where: { userEmail },
+      where: { ownerEmail_userEmail: { ownerEmail: owner, userEmail } },
     });
 
     if (savedCookie && savedCookie.cookies) {
@@ -133,12 +137,14 @@ export async function checkCookiesExist(userEmail?: string): Promise<{ exists: b
 }
 
 /**
- * 저장된 모든 계정 목록 조회
+ * 저장된 계정 목록 조회 - 소유자별 필터링
  */
-export async function getAllAccounts(): Promise<Array<{ userEmail: string; savedAt: Date }>> {
+export async function getAllAccounts(ownerEmail?: string): Promise<Array<{ userEmail: string; savedAt: Date }>> {
   try {
-    console.log('[getAllAccounts] Fetching all accounts from DB...');
+    console.log(`[getAllAccounts] Fetching accounts from DB (owner: ${ownerEmail || 'all'})...`);
+    const whereClause = ownerEmail ? { ownerEmail } : {};
     const accounts = await prisma.tistoryCookie.findMany({
+      where: whereClause,
       select: {
         userEmail: true,
         updatedAt: true,
@@ -161,17 +167,18 @@ export async function getAllAccounts(): Promise<Array<{ userEmail: string; saved
 }
 
 /**
- * 저장된 쿠키 삭제 - 유저 이메일 기반
+ * 저장된 쿠키 삭제 - 유저 이메일 + 소유자 기반
  */
-export async function clearCookies(userEmail?: string): Promise<boolean> {
+export async function clearCookies(userEmail?: string, ownerEmail?: string): Promise<boolean> {
   try {
     if (!userEmail) {
       console.log('No user email provided, cannot clear cookies');
       return false;
     }
 
+    const owner = ownerEmail || userEmail;
     const result = await prisma.tistoryCookie.deleteMany({
-      where: { userEmail },
+      where: { ownerEmail: owner, userEmail },
     });
     if (result.count > 0) {
       console.log(`Cookies cleared for user: ${userEmail}`);

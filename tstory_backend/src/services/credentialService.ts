@@ -6,10 +6,11 @@ import { encrypt, decrypt } from '../utils/crypto';
 const prisma = new PrismaClient();
 
 /**
- * 자격증명 저장 (이미 존재하면 업데이트)
+ * 자격증명 저장 (이미 존재하면 업데이트) - 소유자별 분리
  */
-export async function saveCredential(email: string, password: string): Promise<void> {
-  console.log(`[saveCredential] 시작: ${email}`);
+export async function saveCredential(email: string, password: string, ownerEmail?: string): Promise<void> {
+  const owner = ownerEmail || email;
+  console.log(`[saveCredential] 시작: ${email}, owner: ${owner}`);
 
   let encryptedPassword: string;
   try {
@@ -22,14 +23,15 @@ export async function saveCredential(email: string, password: string): Promise<v
 
   try {
     await prisma.kakaoCredential.upsert({
-      where: { userEmail: email },
+      where: { ownerEmail_userEmail: { ownerEmail: owner, userEmail: email } },
       update: { encryptedPassword },
       create: {
+        ownerEmail: owner,
         userEmail: email,
         encryptedPassword,
       },
     });
-    console.log(`[saveCredential] DB 저장 완료: ${email}`);
+    console.log(`[saveCredential] DB 저장 완료: ${email}, owner: ${owner}`);
   } catch (error) {
     console.error('[saveCredential] DB 저장 실패:', error);
     throw error;
@@ -37,11 +39,12 @@ export async function saveCredential(email: string, password: string): Promise<v
 }
 
 /**
- * 특정 이메일의 자격증명 조회 (복호화)
+ * 특정 이메일의 자격증명 조회 (복호화) - 소유자별 분리
  */
-export async function getCredential(email: string): Promise<{ email: string; password: string } | null> {
+export async function getCredential(email: string, ownerEmail?: string): Promise<{ email: string; password: string } | null> {
+  const owner = ownerEmail || email;
   const credential = await prisma.kakaoCredential.findUnique({
-    where: { userEmail: email },
+    where: { ownerEmail_userEmail: { ownerEmail: owner, userEmail: email } },
   });
 
   if (!credential) {
@@ -58,10 +61,12 @@ export async function getCredential(email: string): Promise<{ email: string; pas
 }
 
 /**
- * 저장된 모든 자격증명 목록 (비밀번호 제외)
+ * 저장된 자격증명 목록 (비밀번호 제외) - 소유자별 필터링
  */
-export async function getAllCredentials(): Promise<Array<{ userEmail: string; savedAt: Date }>> {
+export async function getAllCredentials(ownerEmail?: string): Promise<Array<{ userEmail: string; savedAt: Date }>> {
+  const whereClause = ownerEmail ? { ownerEmail } : {};
   const credentials = await prisma.kakaoCredential.findMany({
+    where: whereClause,
     select: {
       userEmail: true,
       updatedAt: true,
@@ -76,14 +81,15 @@ export async function getAllCredentials(): Promise<Array<{ userEmail: string; sa
 }
 
 /**
- * 자격증명 삭제
+ * 자격증명 삭제 - 소유자별 분리
  */
-export async function deleteCredential(email: string): Promise<boolean> {
+export async function deleteCredential(email: string, ownerEmail?: string): Promise<boolean> {
   try {
+    const owner = ownerEmail || email;
     await prisma.kakaoCredential.delete({
-      where: { userEmail: email },
+      where: { ownerEmail_userEmail: { ownerEmail: owner, userEmail: email } },
     });
-    console.log(`자격증명 삭제 완료: ${email}`);
+    console.log(`자격증명 삭제 완료: ${email}, owner: ${owner}`);
     return true;
   } catch {
     return false;

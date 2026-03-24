@@ -39,19 +39,25 @@ model PromptTemplate {
 // 카카오 로그인 자격증명 (암호화 저장)
 model KakaoCredential {
   id                Int      @id @default(autoincrement())
-  userEmail         String   @unique @db.VarChar(255)
+  ownerEmail        String   @db.VarChar(255) // 앱 로그인 사용자 (소유자)
+  userEmail         String   @db.VarChar(255) // 카카오 계정 이메일
   encryptedPassword String   @db.Text
   createdAt         DateTime @default(now())
   updatedAt         DateTime @updatedAt
+
+  @@unique([ownerEmail, userEmail])
 }
 
 // 티스토리 로그인 쿠키 저장 (유저별 분리)
 model TistoryCookie {
-  id        Int      @id @default(autoincrement())
-  userEmail String   @unique @db.VarChar(255) // 카카오 이메일 (고유키)
-  cookies   String   @db.LongText // JSON 형식 쿠키 데이터
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id         Int      @id @default(autoincrement())
+  ownerEmail String   @db.VarChar(255) // 앱 로그인 사용자 (소유자)
+  userEmail  String   @db.VarChar(255) // 카카오 이메일
+  cookies    String   @db.LongText // JSON 형식 쿠키 데이터
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@unique([ownerEmail, userEmail])
 }
 
 // 예약 발행 글

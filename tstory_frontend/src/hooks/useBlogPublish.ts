@@ -2,10 +2,13 @@
 
 import { useState } from 'react';
 import { safeJsonParse } from '../utils/api';
+import { useAuth } from '../contexts/AuthContext';
 import type { PreviewData, PublishResult, PublishProgress } from '../types/blog';
 // PreviewData는 폴링 결과에서도 사용됨
 
 export function useBlogPublish(selectedAccount: string | null) {
+  const { user } = useAuth();
+  const ownerEmail = user?.email;
   const [loading, setLoading] = useState(false);
   const [loadingType, setLoadingType] = useState<'preview' | 'publish' | null>(null);
   const [previewData, setPreviewData] = useState<PreviewData | null>(null);
@@ -157,7 +160,7 @@ export function useBlogPublish(selectedAccount: string | null) {
       const startResponse = await fetch('/api/blog/start-generate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ...formData, userEmail: selectedAccount }),
+        body: JSON.stringify({ ...formData, userEmail: selectedAccount, ownerEmail }),
       });
 
       const startResult = await safeJsonParse(startResponse);
@@ -258,6 +261,7 @@ export function useBlogPublish(selectedAccount: string | null) {
           content: editedData.content,
           metaDescription: editedData.metaDescription,
           userEmail: selectedAccount,
+          ownerEmail,
         }),
       });
 

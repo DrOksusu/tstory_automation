@@ -18,9 +18,10 @@ export async function publishToTistory(params: {
   content: string;
   tag?: string;
   userEmail?: string;
+  ownerEmail?: string;
   onProgress?: (message: string) => void;
 }): Promise<TistoryPublishResult> {
-  const { title, content, tag, userEmail, onProgress } = params;
+  const { title, content, tag, userEmail, ownerEmail, onProgress } = params;
 
   // 진행 상태 리포터
   const report = (msg: string) => {
@@ -87,8 +88,8 @@ export async function publishToTistory(params: {
 
     // 쿠키 로드 시도
     report('로그인 상태 확인 중...');
-    const cookiesLoaded = await loadCookies(page, userEmail);
-    console.log(`Cookies loaded: ${cookiesLoaded} (user: ${userEmail || 'none'})`);
+    const cookiesLoaded = await loadCookies(page, userEmail, ownerEmail);
+    console.log(`Cookies loaded: ${cookiesLoaded} (user: ${userEmail || 'none'}, owner: ${ownerEmail || 'none'})`);
 
     // 로그인 상태 확인
     const loggedIn = await isLoggedIn(page);
@@ -783,7 +784,7 @@ export async function publishToTistory(params: {
     const publishedUrl = page.url();
     console.log('Post published! URL:', publishedUrl);
 
-    await saveCookies(page, userEmail);
+    await saveCookies(page, userEmail, ownerEmail);
 
     return {
       success: true,

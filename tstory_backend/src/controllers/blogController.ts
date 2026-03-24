@@ -43,7 +43,7 @@ export async function startGenerate(
   req: Request<object, object, GenerateBlogRequest>,
   res: Response
 ): Promise<void> {
-  const { sourceUrl, mainKeyword, regionKeyword, userEmail, aiModel } = req.body;
+  const { sourceUrl, mainKeyword, regionKeyword, userEmail, ownerEmail, aiModel } = req.body;
 
   if (!sourceUrl || !mainKeyword || !regionKeyword) {
     res.status(400).json({
@@ -67,7 +67,7 @@ export async function startGenerate(
   generateTasks.set(taskId, task);
 
   // 백그라운드에서 작업 실행
-  runGenerateTask(taskId, sourceUrl, mainKeyword, regionKeyword, userEmail, aiModel).catch((error) => {
+  runGenerateTask(taskId, sourceUrl, mainKeyword, regionKeyword, userEmail, aiModel, ownerEmail).catch((error) => {
     console.error(`Generate task error for ${taskId}:`, error);
     const task = generateTasks.get(taskId);
     if (task) {
@@ -128,7 +128,8 @@ async function runGenerateTask(
   mainKeyword: string,
   regionKeyword: string,
   userEmail?: string,
-  aiModel?: 'gemini' | 'claude'
+  aiModel?: 'gemini' | 'claude',
+  ownerEmail?: string
 ): Promise<void> {
   const task = generateTasks.get(taskId);
   if (!task) return;
@@ -176,7 +177,7 @@ async function runGenerateTask(
     // 5~12. 티스토리에 발행 (onProgress 8회 호출)
     task.status = 'publishing';
     task.message = '티스토리에 발행 중... (브라우저 작업 진행 중)';
-    console.log(`[${taskId}] Publishing to Tistory... (user: ${userEmail || 'none'})`);
+    console.log(`[${taskId}] Publishing to Tistory... (user: ${userEmail || 'none'}, owner: ${ownerEmail || 'none'})`);
 
     let publishStep = 4;
     const tistoryResult = await publishToTistory({
@@ -184,6 +185,7 @@ async function runGenerateTask(
       content: cleanedContent,
       tag: `${mainKeyword},${regionKeyword}`,
       userEmail,
+      ownerEmail,
       onProgress: (msg) => { publishStep++; task.step = publishStep; task.message = msg; },
     });
 
@@ -242,6 +244,7 @@ interface PublishContentRequest {
   content: string;
   metaDescription?: string;
   userEmail?: string;
+  ownerEmail?: string;
 }
 
 /**
@@ -252,7 +255,7 @@ export async function startPublishContent(
   req: Request<object, object, PublishContentRequest>,
   res: Response
 ): Promise<void> {
-  const { title, content, metaDescription, userEmail } = req.body;
+  const { title, content, metaDescription, userEmail, ownerEmail } = req.body;
 
   if (!title || !content) {
     res.status(400).json({
@@ -276,7 +279,7 @@ export async function startPublishContent(
   generateTasks.set(taskId, task);
 
   // 백그라운드에서 발행 작업 실행
-  runPublishContentTask(taskId, title, content, userEmail).catch((error) => {
+  runPublishContentTask(taskId, title, content, userEmail, ownerEmail).catch((error) => {
     console.error(`Publish content task error for ${taskId}:`, error);
     const task = generateTasks.get(taskId);
     if (task) {
@@ -300,7 +303,8 @@ async function runPublishContentTask(
   taskId: string,
   title: string,
   content: string,
-  userEmail?: string
+  userEmail?: string,
+  ownerEmail?: string
 ): Promise<void> {
   const task = generateTasks.get(taskId);
   if (!task) return;
@@ -329,7 +333,7 @@ async function runPublishContentTask(
 
     // 3~10. 티스토리에 발행 (onProgress 8회 호출)
     task.message = '티스토리에 발행 중... (브라우저 작업 진행 중)';
-    console.log(`[${taskId}] Publishing edited content to Tistory... (user: ${userEmail || 'none'})`);
+    console.log(`[${taskId}] Publishing edited content to Tistory... (user: ${userEmail || 'none'}, owner: ${ownerEmail || 'none'})`);
 
     let publishStep = 2;
     const tistoryResult = await publishToTistory({
@@ -337,6 +341,7 @@ async function runPublishContentTask(
       content: content,
       tag: '',
       userEmail,
+      ownerEmail,
       onProgress: (msg) => { publishStep++; task.step = publishStep; task.message = msg; },
     });
 
@@ -396,7 +401,7 @@ export async function generateAndPublish(
   req: Request<object, object, GenerateBlogRequest>,
   res: Response
 ): Promise<void> {
-  const { sourceUrl, mainKeyword, regionKeyword, userEmail, aiModel } = req.body;
+  const { sourceUrl, mainKeyword, regionKeyword, userEmail, ownerEmail, aiModel } = req.body;
 
   // 입력값 검증
   if (!sourceUrl || !mainKeyword || !regionKeyword) {
@@ -437,12 +442,13 @@ export async function generateAndPublish(
     });
 
     // 4. 티스토리에 발행 (Puppeteer)
-    console.log(`Publishing to Tistory... (user: ${userEmail || 'none'})`);
+    console.log(`Publishing to Tistory... (user: ${userEmail || 'none'}, owner: ${ownerEmail || 'none'})`);
     const tistoryResult = await publishToTistory({
       title: generatedContent.title,
       content: cleanedContent,
       tag: `${mainKeyword},${regionKeyword}`,
       userEmail,
+      ownerEmail,
     });
 
     if (!tistoryResult.success) {

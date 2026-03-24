@@ -3,6 +3,7 @@ export interface GenerateBlogRequest {
   mainKeyword: string;    // 메인 키워드
   regionKeyword: string;  // 지역 키워드
   userEmail?: string;     // 사용자 이메일 (쿠키 로드용)
+  ownerEmail?: string;    // 앱 로그인 사용자 (소유자)
   aiModel?: 'gemini' | 'claude';  // AI 모델 선택 (기본값: gemini)
 }
 
@@ -43,5 +44,6 @@ export interface LoginSession {
   startedAt: number;
   liveViewUrl?: string; // Browserbase 라이브 뷰 URL
   browserbaseSessionId?: string; // Browserbase 세션 ID
-  userEmail?: string; // 로그인 유저 이메일
+  userEmail?: string; // 로그인 유저 이메일 (카카오 계정)
+  ownerEmail?: string; // 앱 로그인 사용자 (소유자)
 }

@@ -12,7 +12,7 @@ const router = Router();
  */
 router.post('/test-login', async (req: Request, res: Response) => {
   try {
-    const { email, password } = req.body;
+    const { email, password, ownerEmail } = req.body;
 
     if (!email || !password) {
       res.status(400).json({
@@ -23,12 +23,12 @@ router.post('/test-login', async (req: Request, res: Response) => {
     }
 
     console.log('Starting login test with provided credentials...');
-    const result = await testLogin({ email, password });
+    const result = await testLogin({ email, password }, ownerEmail);
 
     if (result.success) {
       // 로그인 성공 시 자격증명도 자동 저장
       try {
-        await saveCredential(email, password);
+        await saveCredential(email, password, ownerEmail);
       } catch (credErr) {
         console.error('자격증명 저장 실패 (로그인은 성공):', credErr);
       }
@@ -100,7 +100,7 @@ router.get('/manual-login', async (req: Request, res: Response) => {
  */
 router.post('/start-login', async (req: Request, res: Response) => {
   try {
-    const { email } = req.body;
+    const { email, ownerEmail } = req.body;
 
     if (!email) {
       res.status(400).json({
@@ -110,8 +110,8 @@ router.post('/start-login', async (req: Request, res: Response) => {
       return;
     }
 
-    console.log(`Starting manual login (polling mode) for user: ${email}...`);
-    const { sessionId, liveViewUrl } = await startManualLogin(email);
+    console.log(`Starting manual login (polling mode) for user: ${email}, owner: ${ownerEmail}...`);
+    const { sessionId, liveViewUrl } = await startManualLogin(email, ownerEmail);
 
     res.json({
       success: true,
@@ -188,7 +188,8 @@ router.get('/login-session/:sessionId', async (req: Request, res: Response) => {
 router.get('/check-login', async (req: Request, res: Response) => {
   try {
     const userEmail = req.query.email as string | undefined;
-    const result = await checkCookiesExist(userEmail);
+    const ownerEmail = req.query.ownerEmail as string | undefined;
+    const result = await checkCookiesExist(userEmail, ownerEmail);
     res.json({
       success: true,
       loggedIn: result.exists,
@@ -214,6 +215,7 @@ router.get('/check-login', async (req: Request, res: Response) => {
  */
 router.delete('/cookies', async (req: Request, res: Response) => {
   const userEmail = req.query.email as string | undefined;
+  const ownerEmail = req.query.ownerEmail as string | undefined;
 
   if (!userEmail) {
     res.status(400).json({
@@ -223,7 +225,7 @@ router.delete('/cookies', async (req: Request, res: Response) => {
     return;
   }
 
-  const cleared = await clearCookies(userEmail);
+  const cleared = await clearCookies(userEmail, ownerEmail);
 
   if (cleared) {
     res.json({
@@ -244,7 +246,8 @@ router.delete('/cookies', async (req: Request, res: Response) => {
  */
 router.get('/accounts', async (req: Request, res: Response) => {
   try {
-    const accounts = await getAllAccounts();
+    const ownerEmail = req.query.ownerEmail as string | undefined;
+    const accounts = await getAllAccounts(ownerEmail);
     res.json({
       success: true,
       accounts,
@@ -283,7 +286,8 @@ router.get('/status', (req: Request, res: Response) => {
  */
 router.get('/credentials', async (req: Request, res: Response) => {
   try {
-    const credentials = await getAllCredentials();
+    const ownerEmail = req.query.ownerEmail as string | undefined;
+    const credentials = await getAllCredentials(ownerEmail);
     res.json({ success: true, credentials });
   } catch (error) {
     console.error('Get credentials error:', error);
@@ -298,12 +302,12 @@ router.get('/credentials', async (req: Request, res: Response) => {
  */
 router.post('/credentials', async (req: Request, res: Response) => {
   try {
-    const { email, password } = req.body;
+    const { email, password, ownerEmail } = req.body;
     if (!email || !password) {
       res.status(400).json({ success: false, message: '이메일과 비밀번호를 입력해주세요.' });
       return;
     }
-    await saveCredential(email, password);
+    await saveCredential(email, password, ownerEmail);
     res.json({ success: true, message: '자격증명이 저장되었습니다.' });
   } catch (error) {
     console.error('Save credential error:', error instanceof Error ? error.message : error);
@@ -319,7 +323,8 @@ router.post('/credentials', async (req: Request, res: Response) => {
 router.get('/credentials/:email', async (req: Request, res: Response) => {
   try {
     const { email } = req.params;
-    const credential = await getCredential(email);
+    const ownerEmail = req.query.ownerEmail as string | undefined;
+    const credential = await getCredential(email, ownerEmail);
     if (!credential) {
       res.status(404).json({ success: false, message: '저장된 자격증명이 없습니다.' });
       return;
@@ -338,11 +343,12 @@ router.get('/credentials/:email', async (req: Request, res: Response) => {
 router.delete('/credentials', async (req: Request, res: Response) => {
   try {
     const email = req.query.email as string;
+    const ownerEmail = req.query.ownerEmail as string | undefined;
     if (!email) {
       res.status(400).json({ success: false, message: '이메일을 지정해주세요.' });
       return;
     }
-    const deleted = await deleteCredential(email);
+    const deleted = await deleteCredential(email, ownerEmail);
     res.json({
       success: true,
       message: deleted ? '자격증명이 삭제되었습니다.' : '삭제할 자격증명이 없습니다.',

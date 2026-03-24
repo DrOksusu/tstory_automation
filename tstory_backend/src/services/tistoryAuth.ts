@@ -70,7 +70,7 @@ export async function isLoggedIn(page: Page): Promise<boolean> {
 /**
  * 카카오 계정으로 티스토리 로그인
  */
-export async function loginToTistory(page: Page, credentials?: { email: string; password: string }): Promise<boolean> {
+export async function loginToTistory(page: Page, credentials?: { email: string; password: string }, ownerEmail?: string): Promise<boolean> {
   // 인자로 받은 credentials가 없으면 config에서 가져옴
   const email = credentials?.email || config.kakao.email;
   const password = credentials?.password || config.kakao.password;
@@ -209,7 +209,7 @@ export async function loginToTistory(page: Page, credentials?: { email: string; 
 
     if (currentUrl.includes('tistory.com') && !currentUrl.includes('login')) {
       console.log('Login successful!');
-      await saveCookies(page, email);
+      await saveCookies(page, email, ownerEmail);
       return true;
     }
 
@@ -245,7 +245,7 @@ export async function loginToTistory(page: Page, credentials?: { email: string; 
     console.log(`Final URL: ${finalUrl}`);
 
     if (finalUrl.includes('tistory.com') && !finalUrl.includes('login')) {
-      await saveCookies(page, email);
+      await saveCookies(page, email, ownerEmail);
       return true;
     }
 
@@ -262,7 +262,7 @@ export async function loginToTistory(page: Page, credentials?: { email: string; 
 /**
  * 로그인 테스트 - 유저 이메일 기반
  */
-export async function testLogin(credentials?: { email: string; password: string }): Promise<{ success: boolean; message: string; userEmail?: string }> {
+export async function testLogin(credentials?: { email: string; password: string }, ownerEmail?: string): Promise<{ success: boolean; message: string; userEmail?: string }> {
   let browser: Browser | null = null;
   let useBrowserbase = false;
 
@@ -296,25 +296,25 @@ export async function testLogin(credentials?: { email: string; password: string 
     const page = await browser.newPage();
     await page.setViewport({ width: 1280, height: 720 });
 
-    await loadCookies(page, credentials.email);
+    await loadCookies(page, credentials.email, ownerEmail);
 
     const loggedIn = await isLoggedIn(page);
     console.log(`[testLogin] Already logged in: ${loggedIn}`);
 
     if (loggedIn) {
       // 이미 로그인된 경우에도 쿠키 갱신
-      const cookiesSaved = await saveCookies(page, credentials.email);
+      const cookiesSaved = await saveCookies(page, credentials.email, ownerEmail);
       console.log(`[testLogin] Cookies refreshed: ${cookiesSaved}`);
       return { success: true, message: '이미 로그인되어 있습니다 (쿠키 유효)', userEmail: credentials.email };
     }
 
     console.log('[testLogin] Attempting login...');
-    const loginSuccess = await loginToTistory(page, credentials);
+    const loginSuccess = await loginToTistory(page, credentials, ownerEmail);
     console.log(`[testLogin] Login result: ${loginSuccess}`);
 
     if (loginSuccess) {
       // 로그인 성공 시 쿠키 저장
-      const cookiesSaved = await saveCookies(page, credentials.email);
+      const cookiesSaved = await saveCookies(page, credentials.email, ownerEmail);
       console.log(`[testLogin] Cookies saved after login: ${cookiesSaved}`);
 
       if (!cookiesSaved) {
@@ -452,7 +452,7 @@ export async function manualLogin(): Promise<{ success: boolean; message: string
  * 수동 로그인 시작 (폴링 방식) - 즉시 세션 ID와 라이브 뷰 URL 반환
  * userEmail: 수동 로그인 시 쿠키를 저장할 유저 이메일 (옵션)
  */
-export async function startManualLogin(userEmail?: string): Promise<{ sessionId: string; liveViewUrl?: string }> {
+export async function startManualLogin(userEmail?: string, ownerEmail?: string): Promise<{ sessionId: string; liveViewUrl?: string }> {
   // 기존 세션들 모두 취소
   console.log(`Cancelling ${loginSessions.size} existing login sessions...`);
   for (const [existingSessionId, existingSession] of loginSessions.entries()) {
@@ -475,6 +475,7 @@ export async function startManualLogin(userEmail?: string): Promise<{ sessionId:
     browser: null,
     startedAt: Date.now(),
     userEmail,
+    ownerEmail,
   };
 
   loginSessions.set(sessionId, session);
@@ -669,7 +670,7 @@ async function runLoginProcess(sessionId: string): Promise<void> {
       console.log(`[${sessionId}] Saving cookies for user: ${session.userEmail}...`);
 
       if (session.userEmail) {
-        const saved = await saveCookies(page, session.userEmail);
+        const saved = await saveCookies(page, session.userEmail, session.ownerEmail);
         console.log(`[${sessionId}] First cookie save result: ${saved}`);
 
         // 블로그 페이지로 이동해서 추가 쿠키 획득
@@ -679,14 +680,14 @@ async function runLoginProcess(sessionId: string): Promise<void> {
             timeout: 30000
           });
           await delay(2000);
-          const saved2 = await saveCookies(page, session.userEmail);
+          const saved2 = await saveCookies(page, session.userEmail, session.ownerEmail);
           console.log(`[${sessionId}] Second cookie save result: ${saved2}`);
         } catch (e) {
           console.log(`[${sessionId}] Blog page navigation skipped:`, e);
         }
 
         // 저장 확인
-        const accounts = await getAllAccounts();
+        const accounts = await getAllAccounts(session.ownerEmail);
         console.log(`[${sessionId}] Accounts after save:`, accounts.map(a => a.userEmail));
 
         if (accounts.some(a => a.userEmail === session.userEmail)) {
@@ -859,7 +860,7 @@ async function runBrowserbaseLoginProcess(sessionId: string): Promise<void> {
       console.log(`[${sessionId}] Saving cookies for user: ${session.userEmail}...`);
 
       if (session.userEmail) {
-        const saved = await saveCookies(page, session.userEmail);
+        const saved = await saveCookies(page, session.userEmail, session.ownerEmail);
         console.log(`[${sessionId}] First cookie save result: ${saved}`);
 
         // 블로그 페이지로 이동해서 추가 쿠키 획득
@@ -869,14 +870,14 @@ async function runBrowserbaseLoginProcess(sessionId: string): Promise<void> {
             timeout: 30000
           });
           await delay(2000);
-          const saved2 = await saveCookies(page, session.userEmail);
+          const saved2 = await saveCookies(page, session.userEmail, session.ownerEmail);
           console.log(`[${sessionId}] Second cookie save result: ${saved2}`);
         } catch (e) {
           console.log(`[${sessionId}] Blog page navigation skipped:`, e);
         }
 
         // 저장 확인
-        const accounts = await getAllAccounts();
+        const accounts = await getAllAccounts(session.ownerEmail);
         console.log(`[${sessionId}] Accounts after save:`, accounts.map(a => a.userEmail));
 
         if (accounts.some(a => a.userEmail === session.userEmail)) {

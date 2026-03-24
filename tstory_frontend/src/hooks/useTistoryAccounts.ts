@@ -2,6 +2,7 @@
 
 import { useState, useRef, useCallback } from 'react';
 import { safeJsonParse } from '../utils/api';
+import { useAuth } from '../contexts/AuthContext';
 import type { TistoryAccount, AddAccountStatus, SavedCredential } from '../types/blog';
 
 // 쿠키 신선도 계산: savedAt 기준 경과 시간으로 판단
@@ -18,6 +19,8 @@ export function getCookieFreshness(savedAt: string): CookieFreshness {
 }
 
 export function useTistoryAccounts() {
+  const { user } = useAuth();
+  const ownerEmail = user?.email;
   const [accounts, setAccounts] = useState<TistoryAccount[]>([]);
   const [selectedAccount, setSelectedAccount] = useState<string | null>(null);
   const [loadingAccounts, setLoadingAccounts] = useState(true);
@@ -34,7 +37,8 @@ export function useTistoryAccounts() {
   const fetchAccounts = useCallback(async (selectEmail?: string) => {
     try {
       setLoadingAccounts(true);
-      const response = await fetch('/auth/accounts');
+      const params = ownerEmail ? `?ownerEmail=${encodeURIComponent(ownerEmail)}` : '';
+      const response = await fetch(`/auth/accounts${params}`);
       const result = await safeJsonParse(response);
       if (!result.ok || !result.data) {
         console.error('Failed to fetch accounts:', result.error);
@@ -56,12 +60,13 @@ export function useTistoryAccounts() {
     } finally {
       setLoadingAccounts(false);
     }
-  }, []);
+  }, [ownerEmail]);
 
   // 저장된 자격증명 목록 로드
   const fetchCredentials = useCallback(async () => {
     try {
-      const response = await fetch('/auth/credentials');
+      const params = ownerEmail ? `?ownerEmail=${encodeURIComponent(ownerEmail)}` : '';
+      const response = await fetch(`/auth/credentials${params}`);
       const result = await safeJsonParse(response);
       if (!result.ok || !result.data) return;
       const data = result.data as { success: boolean; credentials: SavedCredential[] };
@@ -71,14 +76,15 @@ export function useTistoryAccounts() {
     } catch (error) {
       console.error('Failed to fetch credentials:', error);
     }
-  }, []);
+  }, [ownerEmail]);
 
   // 저장된 자격증명 선택 시 이메일/비밀번호 자동입력
   const handleSelectCredential = useCallback(async (email: string) => {
     if (!email) return;
     setNewAccountEmail(email);
     try {
-      const response = await fetch(`/auth/credentials/${encodeURIComponent(email)}`);
+      const params = ownerEmail ? `?ownerEmail=${encodeURIComponent(ownerEmail)}` : '';
+      const response = await fetch(`/auth/credentials/${encodeURIComponent(email)}${params}`);
       const result = await safeJsonParse(response);
       if (!result.ok || !result.data) return;
       const data = result.data as { success: boolean; credential: { email: string; password: string } };
@@ -88,7 +94,7 @@ export function useTistoryAccounts() {
     } catch (error) {
       console.error('Failed to fetch credential:', error);
     }
-  }, []);
+  }, [ownerEmail]);
 
   // 계정 추가 (자동 로그인)
   const handleAddAccountAuto = async () => {
@@ -107,6 +113,7 @@ export function useTistoryAccounts() {
         body: JSON.stringify({
           email: newAccountEmail,
           password: newAccountPassword,
+          ownerEmail,
         }),
       });
 
@@ -121,7 +128,8 @@ export function useTistoryAccounts() {
         // 자격증명 저장 체크 시 별도 저장 (test-login에서도 저장하지만 체크 해제 시 삭제)
         if (!saveCredentialChecked) {
           try {
-            await fetch(`/auth/credentials?email=${encodeURIComponent(newAccountEmail)}`, { method: 'DELETE' });
+            const delParams = ownerEmail ? `&ownerEmail=${encodeURIComponent(ownerEmail)}` : '';
+            await fetch(`/auth/credentials?email=${encodeURIComponent(newAccountEmail)}${delParams}`, { method: 'DELETE' });
           } catch { /* 무시 */ }
         }
 
@@ -162,7 +170,7 @@ export function useTistoryAccounts() {
       const response = await fetch('/auth/start-login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email: newAccountEmail }),
+        body: JSON.stringify({ email: newAccountEmail, ownerEmail }),
       });
 
       const result = await safeJsonParse(response);
@@ -257,7 +265,8 @@ export function useTistoryAccounts() {
     }
 
     try {
-      const response = await fetch(`/auth/cookies?email=${encodeURIComponent(email)}`, {
+      const ownerParam = ownerEmail ? `&ownerEmail=${encodeURIComponent(ownerEmail)}` : '';
+      const response = await fetch(`/auth/cookies?email=${encodeURIComponent(email)}${ownerParam}`, {
         method: 'DELETE',
       });
 
