@@ -26,11 +26,11 @@ export async function loadCookies(page: Page, userEmail?: string, ownerEmail?: s
       const cookies = JSON.parse(cookieRecord.cookies);
       console.log(`Loading ${cookies.length} cookies from DB...`);
 
-      // 티스토리 관련 쿠키만 필터링
+      // 티스토리 + 카카오 쿠키 모두 로드 (카카오 SSO 세션 유지 필요)
       const tistoryCookies = cookies.filter((cookie: { domain: string }) =>
-        cookie.domain.includes('tistory.com')
+        cookie.domain.includes('tistory.com') || cookie.domain.includes('kakao.com')
       );
-      console.log(`Found ${tistoryCookies.length} tistory cookies`);
+      console.log(`Found ${tistoryCookies.length} tistory/kakao cookies`);
 
       await page.setCookie(...tistoryCookies);
       console.log('Cookies loaded successfully from DB');
