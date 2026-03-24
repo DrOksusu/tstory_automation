@@ -4,6 +4,19 @@ import { useState, useRef, useCallback } from 'react';
 import { safeJsonParse } from '../utils/api';
 import type { TistoryAccount, AddAccountStatus, SavedCredential } from '../types/blog';
 
+// 쿠키 신선도 계산: savedAt 기준 경과 시간으로 판단
+export type CookieFreshness = 'fresh' | 'warning' | 'expired';
+
+const SIX_HOURS_MS = 6 * 60 * 60 * 1000;
+const TWENTY_FOUR_HOURS_MS = 24 * 60 * 60 * 1000;
+
+export function getCookieFreshness(savedAt: string): CookieFreshness {
+  const elapsed = Date.now() - new Date(savedAt).getTime();
+  if (elapsed >= TWENTY_FOUR_HOURS_MS) return 'expired';
+  if (elapsed >= SIX_HOURS_MS) return 'warning';
+  return 'fresh';
+}
+
 export function useTistoryAccounts() {
   const [accounts, setAccounts] = useState<TistoryAccount[]>([]);
   const [selectedAccount, setSelectedAccount] = useState<string | null>(null);

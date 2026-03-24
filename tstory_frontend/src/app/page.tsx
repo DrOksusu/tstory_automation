@@ -6,8 +6,17 @@ import { useAuth } from '@/contexts/AuthContext';
 import BlogForm from '@/components/BlogForm';
 import PreviewModal from '@/components/PreviewModal';
 import ResultModal from '@/components/ResultModal';
-import { useTistoryAccounts } from '@/hooks/useTistoryAccounts';
+import { useTistoryAccounts, getCookieFreshness } from '@/hooks/useTistoryAccounts';
+import type { CookieFreshness } from '@/hooks/useTistoryAccounts';
 import { useBlogPublish } from '@/hooks/useBlogPublish';
+import type { PreviewData } from '@/types/blog';
+
+// 쿠키 신선도별 뱃지 설정
+const FRESHNESS_BADGE: Record<CookieFreshness, { label: string; className: string }> = {
+  fresh:   { label: '로그인 유효',   className: 'bg-green-100 text-green-700' },
+  warning: { label: '만료 가능',     className: 'bg-yellow-100 text-yellow-700' },
+  expired: { label: '재로그인 필요', className: 'bg-red-100 text-red-700' },
+};
 
 // 밀리초를 "X분 Y초" 형식으로 변환
 function formatDuration(ms: number): string {
@@ -63,6 +72,27 @@ export default function Home() {
     handlePublish,
     handlePublishFromPreview,
   } = useBlogPublish(selectedAccount);
+
+  // 선택 계정의 쿠키 만료 여부 확인 후 발행 진행
+  const confirmIfExpired = (): boolean => {
+    const account = accounts.find((a) => a.userEmail === selectedAccount);
+    if (!account) return true;
+    const freshness = getCookieFreshness(account.savedAt);
+    if (freshness === 'expired') {
+      return confirm('쿠키가 만료되었을 수 있습니다. 계속 진행하시겠습니까?');
+    }
+    return true;
+  };
+
+  const handlePublishWithCheck = () => {
+    if (!confirmIfExpired()) return;
+    handlePublish();
+  };
+
+  const handlePublishFromPreviewWithCheck = (editedData: PreviewData) => {
+    if (!confirmIfExpired()) return;
+    handlePublishFromPreview(editedData);
+  };
 
   // 로그인하지 않은 경우 로그인 페이지로 리다이렉트
   useEffect(() => {
@@ -161,7 +191,18 @@ export default function Home() {
                       )}
                     </div>
                     <div>
-                      <p className="font-medium text-slate-800">{account.userEmail}</p>
+                      <div className="flex items-center gap-2">
+                        <p className="font-medium text-slate-800">{account.userEmail}</p>
+                        {(() => {
+                          const freshness = getCookieFreshness(account.savedAt);
+                          const badge = FRESHNESS_BADGE[freshness];
+                          return (
+                            <span className={`px-2 py-0.5 text-xs font-medium rounded-full ${badge.className}`}>
+                              {badge.label}
+                            </span>
+                          );
+                        })()}
+                      </div>
                       <p className="text-xs text-slate-500">
                         쿠키 저장: {new Date(account.savedAt).toLocaleString('ko-KR')}
                       </p>
@@ -191,7 +232,7 @@ export default function Home() {
         formData={formData}
         setFormData={setFormData}
         onPreview={handlePreview}
-        onPublish={handlePublish}
+        onPublish={handlePublishWithCheck}
         loading={loading}
         loadingType={loadingType}
       />
@@ -371,7 +412,7 @@ export default function Home() {
         <PreviewModal
           data={previewData}
           onClose={() => setPreviewData(null)}
-          onPublish={handlePublishFromPreview}
+          onPublish={handlePublishFromPreviewWithCheck}
           userEmail={selectedAccount || undefined}
         />
       )}
