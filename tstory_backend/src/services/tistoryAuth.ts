@@ -738,7 +738,7 @@ async function runLoginProcess(sessionId: string): Promise<void> {
         try {
           await page.goto(`https://${config.tistory.blogName}.tistory.com`, {
             waitUntil: 'domcontentloaded',
-            timeout: 30000
+            timeout: 60000
           });
           await delay(2000);
           const saved2 = await saveCookies(page, session.userEmail, session.ownerEmail);
@@ -826,21 +826,15 @@ async function runBrowserbaseLoginProcess(sessionId: string): Promise<void> {
 
     await page.setViewport({ width: 1280, height: 720 });
 
-    // 쿠키/세션 정리를 위해 먼저 티스토리 메인 방문
-    console.log(`[${sessionId}] Visiting Tistory main page first...`);
-    await page.goto('https://www.tistory.com/', {
-      waitUntil: 'networkidle2',
-      timeout: 30000,
-    });
-    await delay(2000);
-
+    // 티스토리 로그인 페이지로 바로 이동 (타임아웃 여유 확보)
     console.log(`[${sessionId}] Opening Tistory login page...`);
     session.message = '티스토리 로그인 페이지로 이동 중...';
 
     await page.goto('https://www.tistory.com/auth/login', {
-      waitUntil: 'networkidle2',
-      timeout: 30000,
+      waitUntil: 'domcontentloaded',
+      timeout: 60000,
     });
+    await delay(2000);
 
     session.message = '라이브 뷰에서 카카오 로그인을 완료해주세요...';
     console.log(`[${sessionId}] Waiting for user to complete login in live view...`);
@@ -928,7 +922,7 @@ async function runBrowserbaseLoginProcess(sessionId: string): Promise<void> {
         try {
           await page.goto(`https://${config.tistory.blogName}.tistory.com`, {
             waitUntil: 'domcontentloaded',
-            timeout: 30000
+            timeout: 60000
           });
           await delay(2000);
           const saved2 = await saveCookies(page, session.userEmail, session.ownerEmail);
