@@ -77,3 +77,19 @@ model ScheduledPost {
 
   @@index([status, scheduledAt])
 }
+
+// API 에러 로그
+model ErrorLog {
+  id           Int      @id @default(autoincrement())
+  endpoint     String   @db.VarChar(255)
+  method       String   @db.VarChar(10)
+  statusCode   Int
+  errorMessage String   @db.Text
+  errorStack   String?  @db.Text
+  userEmail    String?  @db.VarChar(255)
+  requestBody  String?  @db.Text
+  createdAt    DateTime @default(now())
+
+  @@index([createdAt])
+  @@index([statusCode])
+}

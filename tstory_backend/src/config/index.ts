@@ -38,6 +38,11 @@ export const config = {
     enabled: process.env.BROWSERBASE_ENABLED === 'true',
   },
 
+  // 관리자 이메일 목록
+  admin: {
+    emails: (process.env.ADMIN_EMAILS || '').split(',').map(e => e.trim()).filter(Boolean),
+  },
+
   // AWS S3 (이미지 업로드용)
   aws: {
     accessKeyId: process.env.AWS_ACCESS_KEY_ID || '',

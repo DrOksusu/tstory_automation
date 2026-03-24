@@ -1,6 +1,7 @@
 import cron from 'node-cron';
 import prisma from './prismaClient';
 import { publishToTistory } from '../services/tistoryPublisher';
+import { refreshAllCookies } from './cookieRefreshService';
 
 let isProcessing = false;
 
@@ -94,8 +95,13 @@ async function processScheduledPosts() {
   }
 }
 
-// 스케줄러 시작 (1분 간격)
+// 스케줄러 시작
 export function startScheduler() {
+  // 예약 발행: 1분 간격
   console.log('[스케줄러] 예약 발행 스케줄러 시작 (1분 간격)');
   cron.schedule('* * * * *', processScheduledPosts);
+
+  // 쿠키 갱신: 4시간 간격 (만료 전 갱신)
+  console.log('[스케줄러] 쿠키 갱신 스케줄러 시작 (4시간 간격)');
+  cron.schedule('0 */4 * * *', refreshAllCookies);
 }

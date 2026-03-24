@@ -2,6 +2,7 @@ import { Router, Request, Response } from 'express';
 import { testLogin, clearCookies, manualLogin, startManualLogin, getLoginStatus, cancelLogin, checkCookiesExist, getAllAccounts } from '../services/tistoryService';
 import { saveCredential, getCredential, getAllCredentials, deleteCredential } from '../services/credentialService';
 import { config } from '../config';
+import { logApiError } from '../services/errorLogService';
 
 const router = Router();
 
@@ -48,9 +49,8 @@ router.post('/test-login', async (req: Request, res: Response) => {
     }
   } catch (error) {
     console.error('Login test error:', error);
+    await logApiError(req, 500, error);
     const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-    const errorStack = error instanceof Error ? error.stack : '';
-    console.error('Login test stack:', errorStack);
     res.status(500).json({
       success: false,
       error: errorMessage,
@@ -84,6 +84,7 @@ router.get('/manual-login', async (req: Request, res: Response) => {
     }
   } catch (error) {
     console.error('Manual login error:', error);
+    await logApiError(req, 500, error);
     const errorMessage = error instanceof Error ? error.message : 'Unknown error';
     res.status(500).json({
       success: false,
@@ -123,6 +124,7 @@ router.post('/start-login', async (req: Request, res: Response) => {
     });
   } catch (error) {
     console.error('Start login error:', error);
+    await logApiError(req, 500, error);
     const errorMessage = error instanceof Error ? error.message : 'Unknown error';
     res.status(500).json({
       success: false,
@@ -201,6 +203,7 @@ router.get('/check-login', async (req: Request, res: Response) => {
     });
   } catch (error) {
     console.error('Check login error:', error);
+    await logApiError(req, 500, error);
     res.status(500).json({
       success: false,
       loggedIn: false,
@@ -254,6 +257,7 @@ router.get('/accounts', async (req: Request, res: Response) => {
     });
   } catch (error) {
     console.error('Get accounts error:', error);
+    await logApiError(req, 500, error);
     res.status(500).json({
       success: false,
       error: 'Failed to get accounts',
@@ -291,6 +295,7 @@ router.get('/credentials', async (req: Request, res: Response) => {
     res.json({ success: true, credentials });
   } catch (error) {
     console.error('Get credentials error:', error);
+    await logApiError(req, 500, error);
     res.status(500).json({ success: false, error: '자격증명 목록 조회 실패' });
   }
 });
@@ -311,7 +316,7 @@ router.post('/credentials', async (req: Request, res: Response) => {
     res.json({ success: true, message: '자격증명이 저장되었습니다.' });
   } catch (error) {
     console.error('Save credential error:', error instanceof Error ? error.message : error);
-    console.error('Save credential stack:', error instanceof Error ? error.stack : '');
+    await logApiError(req, 500, error);
     res.status(500).json({ success: false, error: error instanceof Error ? error.message : '자격증명 저장 실패' });
   }
 });
@@ -332,6 +337,7 @@ router.get('/credentials/:email', async (req: Request, res: Response) => {
     res.json({ success: true, credential });
   } catch (error) {
     console.error('Get credential error:', error);
+    await logApiError(req, 500, error);
     res.status(500).json({ success: false, error: '자격증명 조회 실패' });
   }
 });
@@ -355,6 +361,7 @@ router.delete('/credentials', async (req: Request, res: Response) => {
     });
   } catch (error) {
     console.error('Delete credential error:', error);
+    await logApiError(req, 500, error);
     res.status(500).json({ success: false, error: '자격증명 삭제 실패' });
   }
 });

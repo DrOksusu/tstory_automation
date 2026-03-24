@@ -4,7 +4,9 @@ import { config } from './config';
 import blogRoutes from './routes/blogRoutes';
 import authRoutes from './routes/authRoutes';
 import uploadRoutes from './routes/uploadRoutes';
+import adminRoutes from './routes/adminRoutes';
 import { startScheduler } from './services/scheduler';
+import { logError } from './services/errorLogService';
 
 // Unhandled error handlers
 process.on('unhandledRejection', (reason, promise) => {
@@ -45,6 +47,7 @@ app.use(express.urlencoded({ extended: true }));
 app.use('/api/blog', blogRoutes);
 app.use('/auth', authRoutes);
 app.use('/api/upload', uploadRoutes);
+app.use('/api/admin', adminRoutes);
 
 // Health check
 app.get('/health', (req, res) => {
@@ -61,6 +64,17 @@ app.use(
   ) => {
     console.error('Unhandled error:', err.message);
     console.error('Unhandled error stack:', err.stack);
+
+    // 에러 로그 DB 저장
+    logError({
+      endpoint: req.originalUrl || req.url,
+      method: req.method,
+      statusCode: 500,
+      errorMessage: err.message || 'Internal server error',
+      errorStack: err.stack,
+      requestBody: req.body,
+    });
+
     res.status(500).json({
       success: false,
       error: err.message || 'Internal server error',

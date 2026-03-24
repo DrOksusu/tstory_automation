@@ -4,7 +4,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { usePathname } from 'next/navigation';
 
 export default function Header() {
-  const { user, logout } = useAuth();
+  const { user, isAdmin, logout } = useAuth();
   const pathname = usePathname();
 
   // 로그인 페이지에서는 간단한 헤더만 표시
@@ -41,6 +41,11 @@ export default function Header() {
                 <a href="/schedule" className="text-slate-600 hover:text-orange-500 font-medium transition-colors">
                   예약 관리
                 </a>
+                {isAdmin && (
+                  <a href="/admin" className="text-slate-600 hover:text-red-500 font-medium transition-colors">
+                    관리
+                  </a>
+                )}
               </nav>
 
               {user && (

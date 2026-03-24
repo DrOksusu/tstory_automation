@@ -4,6 +4,7 @@ import { publishToTistory } from '../services/tistoryService';
 import { cleanHtml, cleanMetaDescription } from '../utils/htmlProcessor';
 import prisma from '../services/prismaClient';
 import { GenerateBlogRequest, BlogGenerationResult } from '../types';
+import { logApiError } from '../services/errorLogService';
 
 // ==================== 폴링 기반 발행 작업 관리 ====================
 
@@ -487,6 +488,7 @@ export async function generateAndPublish(
     res.json(result);
   } catch (error) {
     console.error('Error in generateAndPublish:', error);
+    await logApiError(req, 500, error);
 
     const errorMessage = error instanceof Error ? error.message : 'Unknown error';
     res.status(500).json({
@@ -536,6 +538,7 @@ export async function generatePreview(
     });
   } catch (error) {
     console.error('Error in generatePreview:', error);
+    await logApiError(req, 500, error);
     const errorMessage = error instanceof Error ? error.message : 'Unknown error';
     res.status(500).json({
       success: false,
@@ -695,6 +698,7 @@ export async function getPosts(req: Request, res: Response): Promise<void> {
     });
   } catch (error) {
     console.error('Error getting posts:', error);
+    await logApiError(req, 500, error);
     res.status(500).json({
       success: false,
       error: 'Failed to get posts',
@@ -736,6 +740,7 @@ export async function getAvgDuration(req: Request, res: Response): Promise<void>
     });
   } catch (error) {
     console.error('Error getting avg duration:', error);
+    await logApiError(req, 500, error);
     res.status(500).json({
       success: false,
       error: 'Failed to get avg duration',
