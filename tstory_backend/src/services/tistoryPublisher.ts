@@ -6,7 +6,7 @@ import { config } from '../config';
 import { TistoryPublishResult } from '../types';
 import { loadCookies, saveCookies } from './tistoryCookieManager';
 import { isLoggedIn, loginToTistory } from './tistoryAuth';
-import { connectToBrowserbase } from './browserbaseConnector';
+import { connectToBrowserbase, getOrCreateContext } from './browserbaseConnector';
 import { delay } from './tistoryUtils';
 import { getUserDataDir, closeExistingBrowser, registerBrowser, unregisterBrowser } from '../utils/browserProfile';
 import { getCredential } from './credentialService';
@@ -42,7 +42,11 @@ export async function publishToTistory(params: {
 
     if (useBrowserbase) {
       console.log('Connecting to Browserbase for publishing...');
-      const result = await connectToBrowserbase();
+      // Context를 통해 세션 간 쿠키/localStorage 유지
+      const contextId = (userEmail && ownerEmail)
+        ? await getOrCreateContext(userEmail, ownerEmail)
+        : undefined;
+      const result = await connectToBrowserbase(contextId);
       browser = result.browser;
       liveViewUrl = result.liveViewUrl;
       console.log('Connected to Browserbase');

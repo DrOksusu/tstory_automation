@@ -8,7 +8,7 @@ import { config } from '../config';
 import prisma from './prismaClient';
 import { loadCookies, saveCookies } from './tistoryCookieManager';
 import { delay } from './tistoryUtils';
-import { connectToBrowserbase } from './browserbaseConnector';
+import { connectToBrowserbase, getOrCreateContext } from './browserbaseConnector';
 import { getUserDataDir, closeExistingBrowser, registerBrowser, unregisterBrowser } from '../utils/browserProfile';
 
 let isRefreshing = false;
@@ -72,7 +72,9 @@ async function refreshSingleAccount(userEmail: string, ownerEmail: string): Prom
 
   try {
     if (useBrowserbase) {
-      const { browser: connectedBrowser } = await connectToBrowserbase();
+      // Context를 통해 세션 간 쿠키/localStorage 유지
+      const contextId = await getOrCreateContext(userEmail, ownerEmail);
+      const { browser: connectedBrowser } = await connectToBrowserbase(contextId);
       browser = connectedBrowser;
     } else {
       const isHeadless = process.env.HEADLESS === 'true' || process.env.NODE_ENV === 'production';

@@ -4,7 +4,7 @@
 import puppeteer, { Browser, Page } from 'puppeteer';
 import { config } from '../config';
 import { loadCookies, saveCookies, getAllAccounts } from './tistoryCookieManager';
-import { connectToBrowserbase } from './browserbaseConnector';
+import { connectToBrowserbase, getOrCreateContext } from './browserbaseConnector';
 import { delay } from './tistoryUtils';
 import { LoginSession } from '../types';
 import { getUserDataDir, closeExistingBrowser, registerBrowser, unregisterBrowser } from '../utils/browserProfile';
@@ -362,7 +362,11 @@ export async function testLogin(credentials?: { email: string; password: string 
 
     if (useBrowserbase) {
       console.log('[testLogin] Connecting to Browserbase for auto login...');
-      const { browser: connectedBrowser } = await connectToBrowserbase();
+      // Context를 통해 세션 간 쿠키/localStorage 유지
+      const contextId = (credentials.email && ownerEmail)
+        ? await getOrCreateContext(credentials.email, ownerEmail)
+        : undefined;
+      const { browser: connectedBrowser } = await connectToBrowserbase(contextId);
       browser = connectedBrowser;
     } else {
       // 로컬 Puppeteer - headless 모드로 실행 (자동 로그인은 화면 불필요)
@@ -840,8 +844,13 @@ async function runBrowserbaseLoginProcess(sessionId: string): Promise<void> {
     session.status = 'in_progress';
     session.message = 'Browserbase에 연결 중...';
 
+    // Context를 통해 세션 간 쿠키/localStorage 유지
+    const contextId = (session.userEmail && session.ownerEmail)
+      ? await getOrCreateContext(session.userEmail, session.ownerEmail)
+      : undefined;
+
     // Browserbase 연결
-    const { browser: connectedBrowser, liveViewUrl, sessionId: bbSessionId } = await connectToBrowserbase();
+    const { browser: connectedBrowser, liveViewUrl, sessionId: bbSessionId } = await connectToBrowserbase(contextId);
     browser = connectedBrowser;
     session.browser = browser;
     session.liveViewUrl = liveViewUrl;

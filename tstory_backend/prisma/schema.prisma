@@ -78,6 +78,18 @@ model ScheduledPost {
   @@index([status, scheduledAt])
 }
 
+// Browserbase Context (세션 간 쿠키/localStorage 유지용)
+model BrowserbaseContext {
+  id         Int      @id @default(autoincrement())
+  ownerEmail String   @db.VarChar(255)
+  userEmail  String   @db.VarChar(255)
+  contextId  String   @db.VarChar(255)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@unique([ownerEmail, userEmail])
+}
+
 // API 에러 로그
 model ErrorLog {
   id           Int      @id @default(autoincrement())
