@@ -564,13 +564,23 @@ export async function startManualLogin(userEmail?: string, ownerEmail?: string):
       }
     });
 
-    // 라이브 뷰 URL이 설정될 때까지 잠시 대기
-    await delay(3000);
-    const updatedSession = loginSessions.get(sessionId);
+    // 라이브 뷰 URL이 설정될 때까지 폴링 대기 (최대 15초)
+    let liveViewUrl: string | undefined;
+    for (let i = 0; i < 15; i++) {
+      await delay(1000);
+      const updatedSession = loginSessions.get(sessionId);
+      if (updatedSession?.liveViewUrl) {
+        liveViewUrl = updatedSession.liveViewUrl;
+        break;
+      }
+      if (updatedSession?.status === 'failed') {
+        break;
+      }
+    }
 
     return {
       sessionId,
-      liveViewUrl: updatedSession?.liveViewUrl,
+      liveViewUrl,
     };
   } else {
     // 로컬 Puppeteer 사용 (로컬에서만 로그인 가능)

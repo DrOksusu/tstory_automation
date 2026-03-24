@@ -187,14 +187,16 @@ export function useTistoryAccounts() {
 
       loginSessionIdRef.current = sessionId;
 
+      let openedLiveView = false;
       if (liveViewUrl) {
         setAddAccountStatus({
           message: '라이브 뷰에서 카카오 로그인을 완료해주세요.',
           liveViewUrl,
         });
         window.open(liveViewUrl, 'browserbase-login', 'width=1300,height=800');
+        openedLiveView = true;
       } else {
-        setAddAccountStatus({ message: '브라우저에서 로그인을 완료해주세요.' });
+        setAddAccountStatus({ message: '로그인 브라우저 준비 중...' });
       }
 
       // 폴링 (3분 + 여유시간)
@@ -214,9 +216,16 @@ export function useTistoryAccounts() {
           }
           const statusData = statusResult.data as { message: string; liveViewUrl?: string; completed?: boolean; success?: boolean; status?: string };
 
+          // 폴링 중 liveViewUrl을 처음 받으면 창 열기
+          const currentLiveViewUrl = statusData.liveViewUrl || liveViewUrl;
+          if (currentLiveViewUrl && !openedLiveView) {
+            window.open(currentLiveViewUrl, 'browserbase-login', 'width=1300,height=800');
+            openedLiveView = true;
+          }
+
           setAddAccountStatus({
             message: statusData.message,
-            liveViewUrl: statusData.liveViewUrl || liveViewUrl,
+            liveViewUrl: currentLiveViewUrl,
           });
 
           if (statusData.completed) {
