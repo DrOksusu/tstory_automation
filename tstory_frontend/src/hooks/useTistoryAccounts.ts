@@ -104,7 +104,7 @@ export function useTistoryAccounts() {
     }
 
     setAddingAccount(true);
-    setAddAccountStatus({ message: '로그인 중...' });
+    setAddAccountStatus({ message: '카카오 로그인 시도 중...', step: 1, totalSteps: 3 });
 
     try {
       const response = await fetch('/auth/test-login', {
@@ -119,10 +119,12 @@ export function useTistoryAccounts() {
 
       const result = await safeJsonParse(response);
       if (!result.ok || !result.data) {
-        setAddAccountStatus({ message: result.error || '로그인 실패' });
+        setAddAccountStatus({ message: result.error || '로그인 실패', step: 3, totalSteps: 3 });
         return;
       }
       const data = result.data as { success: boolean; message?: string };
+
+      setAddAccountStatus({ message: '로그인 확인 중...', step: 2, totalSteps: 3 });
 
       if (data.success) {
         // 자격증명 저장 체크 시 별도 저장 (test-login에서도 저장하지만 체크 해제 시 삭제)
@@ -133,7 +135,7 @@ export function useTistoryAccounts() {
           } catch { /* 무시 */ }
         }
 
-        setAddAccountStatus({ message: '계정 추가 완료!' });
+        setAddAccountStatus({ message: '계정 추가 완료!', step: 3, totalSteps: 3 });
         console.log('Auto login success, refreshing accounts...');
         // 계정 목록 + 자격증명 목록 새로고침
         await Promise.all([fetchAccounts(newAccountEmail), fetchCredentials()]);
@@ -145,7 +147,7 @@ export function useTistoryAccounts() {
           setNewAccountPassword('');
         }, 1000);
       } else {
-        setAddAccountStatus({ message: data.message || '로그인 실패. 2FA 사용 시 수동 로그인을 이용하세요.' });
+        setAddAccountStatus({ message: data.message || '로그인 실패. 2FA 사용 시 수동 로그인을 이용하세요.', step: 3, totalSteps: 3 });
         console.log('Auto login failed:', data.message);
       }
     } catch (error) {
@@ -164,7 +166,7 @@ export function useTistoryAccounts() {
     }
 
     setAddingAccount(true);
-    setAddAccountStatus({ message: '브라우저 창 열기 중...' });
+    setAddAccountStatus({ message: '로그인 브라우저 준비 중...', step: 1, totalSteps: 4 });
 
     try {
       const response = await fetch('/auth/start-login', {
@@ -192,11 +194,13 @@ export function useTistoryAccounts() {
         setAddAccountStatus({
           message: '라이브 뷰에서 카카오 로그인을 완료해주세요.',
           liveViewUrl,
+          step: 2,
+          totalSteps: 4,
         });
         window.open(liveViewUrl, 'browserbase-login', 'width=1300,height=800');
         openedLiveView = true;
       } else {
-        setAddAccountStatus({ message: '로그인 브라우저 준비 중...' });
+        setAddAccountStatus({ message: '로그인 브라우저 준비 중...', step: 1, totalSteps: 4 });
       }
 
       // 폴링 (3분 + 여유시간)
@@ -226,12 +230,14 @@ export function useTistoryAccounts() {
           setAddAccountStatus({
             message: statusData.message,
             liveViewUrl: currentLiveViewUrl,
+            step: 3,
+            totalSteps: 4,
           });
 
           if (statusData.completed) {
             loginSessionIdRef.current = null;
             if (statusData.success) {
-              setAddAccountStatus({ message: '계정 추가 완료!' });
+              setAddAccountStatus({ message: '계정 추가 완료!', step: 4, totalSteps: 4 });
               console.log('Manual login success, refreshing accounts...');
               // 계정 목록 새로고침
               await fetchAccounts(newAccountEmail);
@@ -242,7 +248,7 @@ export function useTistoryAccounts() {
                 setNewAccountPassword('');
               }, 1000);
             } else {
-              setAddAccountStatus({ message: statusData.message });
+              setAddAccountStatus({ message: statusData.message, step: 4, totalSteps: 4 });
               console.log('Manual login failed:', statusData.message);
             }
             return;
@@ -250,7 +256,7 @@ export function useTistoryAccounts() {
 
           if (statusData.status === 'failed' || statusData.status === 'timeout') {
             loginSessionIdRef.current = null;
-            setAddAccountStatus({ message: statusData.message });
+            setAddAccountStatus({ message: statusData.message, step: 4, totalSteps: 4 });
             return;
           }
         } catch (pollError) {
@@ -258,7 +264,7 @@ export function useTistoryAccounts() {
         }
       }
 
-      setAddAccountStatus({ message: '시간 초과. 다시 시도해주세요.' });
+      setAddAccountStatus({ message: '시간 초과. 다시 시도해주세요.', step: 4, totalSteps: 4 });
     } catch (error) {
       setAddAccountStatus({ message: error instanceof Error ? error.message : '오류 발생' });
       console.error(error);

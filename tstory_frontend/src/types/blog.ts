@@ -31,6 +31,8 @@ export interface PublishProgress {
 export interface AddAccountStatus {
   message: string;
   liveViewUrl?: string;
+  step?: number;
+  totalSteps?: number;
 }
 
 export interface SavedCredential {

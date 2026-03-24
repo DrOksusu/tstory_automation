@@ -367,14 +367,39 @@ export default function Home() {
               </p>
 
               {addAccountStatus && (
-                <div className={`p-3 rounded-lg ${
+                <div className={`p-4 rounded-lg ${
                   addAccountStatus.message.includes('완료')
                     ? 'bg-green-50 text-green-700 border border-green-200'
                     : addAccountStatus.liveViewUrl
                     ? 'bg-blue-50 text-blue-700 border border-blue-200'
                     : 'bg-yellow-50 text-yellow-700 border border-yellow-200'
                 }`}>
-                  <p>{addAccountStatus.message}</p>
+                  {/* 프로그레스 바 (step/totalSteps가 있을 때만) */}
+                  {addAccountStatus.step != null && addAccountStatus.totalSteps != null && (
+                    <div className="mb-3">
+                      <div className="flex items-center justify-between mb-1">
+                        <div className="relative flex-1 h-2.5 bg-black/10 rounded-full overflow-hidden">
+                          <div
+                            className="absolute left-0 top-0 h-full bg-gradient-to-r from-orange-500 to-red-500 transition-all duration-500"
+                            style={{ width: `${Math.round((addAccountStatus.step / addAccountStatus.totalSteps) * 100)}%` }}
+                          />
+                        </div>
+                        <span className="ml-3 text-xs font-bold opacity-70 min-w-[3rem] text-right">
+                          {Math.round((addAccountStatus.step / addAccountStatus.totalSteps) * 100)}%
+                        </span>
+                      </div>
+                    </div>
+                  )}
+                  <div className="flex items-center gap-2">
+                    {/* 진행 중일 때 스피너 */}
+                    {addingAccount && (
+                      <svg className="animate-spin h-4 w-4 shrink-0" viewBox="0 0 24 24">
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
+                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                      </svg>
+                    )}
+                    <p className="text-sm font-medium">{addAccountStatus.message}</p>
+                  </div>
                   {addAccountStatus.liveViewUrl && (
                     <a
                       href={addAccountStatus.liveViewUrl}
