@@ -9,6 +9,7 @@ import { isLoggedIn, loginToTistory } from './tistoryAuth';
 import { connectToBrowserbase } from './browserbaseConnector';
 import { delay } from './tistoryUtils';
 import { getUserDataDir, closeExistingBrowser, registerBrowser, unregisterBrowser } from '../utils/browserProfile';
+import { getCredential } from './credentialService';
 
 /**
  * 티스토리에 글 발행 (Puppeteer)
@@ -97,18 +98,37 @@ export async function publishToTistory(params: {
     if (!loggedIn) {
       console.log('Not logged in or session expired');
 
-      // Browserbase 환경에서는 자동 로그인 불가 (2FA 필요)
-      if (config.browserbase.enabled) {
-        console.log('Session expired - user needs to re-login');
-        throw new Error('로그인이 만료되었습니다. 프론트엔드에서 "카카오 로그인" 버튼을 클릭하여 다시 로그인해주세요.');
+      // 저장된 자격증명으로 자동 재로그인 시도 (Browserbase 포함)
+      report('자동 재로그인 시도 중...');
+      let credentials: { email: string; password: string } | null = null;
+
+      if (userEmail) {
+        credentials = await getCredential(userEmail, ownerEmail);
+        if (credentials) {
+          console.log(`Saved credentials found for ${userEmail}, attempting auto re-login...`);
+        }
       }
 
-      // 로컬 환경에서는 자동 로그인 시도
-      report('자동 로그인 시도 중...');
-      const loginSuccess = await loginToTistory(page);
-      if (!loginSuccess) {
-        throw new Error('자동 로그인에 실패했습니다. 수동으로 로그인해주세요.');
+      if (!credentials) {
+        // 저장된 자격증명이 없으면 config에서 기본 계정 사용
+        if (config.kakao.email && config.kakao.password) {
+          credentials = { email: config.kakao.email, password: config.kakao.password };
+          console.log('Using default credentials from config...');
+        }
       }
+
+      if (!credentials) {
+        throw new Error('로그인이 만료되었고 저장된 자격증명이 없습니다. 프론트엔드에서 다시 로그인해주세요.');
+      }
+
+      const loginSuccess = await loginToTistory(page, credentials, ownerEmail);
+      if (!loginSuccess) {
+        throw new Error('자동 재로그인에 실패했습니다. 2FA가 필요하면 프론트엔드에서 수동 로그인해주세요.');
+      }
+
+      // 재로그인 성공 시 쿠키 갱신 저장
+      await saveCookies(page, userEmail, ownerEmail);
+      report('자동 재로그인 성공!');
     }
 
     // 글쓰기 페이지로 이동
