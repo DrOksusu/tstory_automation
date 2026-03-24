@@ -134,16 +134,34 @@ export async function loginToTistory(page: Page, credentials?: { email: string; 
 
     await delay(2000);
 
-    // 이메일 입력
+    // 현재 URL 로그
+    const kakaoUrl = page.url();
+    console.log(`Kakao page URL: ${kakaoUrl}`);
+
+    // 이메일 입력 - 셀렉터를 waitForSelector로 확실히 대기
     console.log('Entering Kakao credentials...');
-    const emailSelectors = ['input[name="loginId"]', 'input[id="loginId--1"]', 'input[type="email"]', 'input[placeholder*="이메일"]'];
+    const emailSelectors = [
+      'input[name="loginId"]',
+      'input[id="loginId--1"]',
+      'input[type="email"]',
+      'input[placeholder*="이메일"]',
+      'input[placeholder*="카카오메일"]',
+      'input[name="email"]',
+      '#id_email_2',
+      'input[id*="login"]',
+    ];
 
     let emailEntered = false;
+
+    // 먼저 어떤 이메일 셀렉터든 나타날 때까지 대기 (최대 10초)
     for (const selector of emailSelectors) {
       try {
+        await page.waitForSelector(selector, { timeout: 3000 });
+        console.log(`Email selector found via waitForSelector: ${selector}`);
         const input = await page.$(selector);
         if (input) {
           await input.click();
+          await delay(300);
           await input.type(email, { delay: 50 });
           emailEntered = true;
           console.log(`Email entered using: ${selector}`);
@@ -151,6 +169,49 @@ export async function loginToTistory(page: Page, credentials?: { email: string; 
         }
       } catch {
         continue;
+      }
+    }
+
+    // 셀렉터로 못 찾으면 페이지 DOM 분석 후 재시도
+    if (!emailEntered) {
+      console.log('Email selectors failed, analyzing page DOM...');
+      const pageInfo = await page.evaluate(() => {
+        const inputs = document.querySelectorAll('input');
+        return Array.from(inputs).map((input, i) => ({
+          index: i,
+          type: input.type,
+          name: input.name,
+          id: input.id,
+          placeholder: input.placeholder,
+          className: input.className,
+          visible: input.offsetHeight > 0,
+        }));
+      });
+      console.log('Page inputs:', JSON.stringify(pageInfo));
+
+      // visible text/email input 찾기
+      const textInput = pageInfo.find(
+        (inp) => inp.visible && (inp.type === 'text' || inp.type === 'email' || inp.type === '')
+      );
+      if (textInput) {
+        const selector = textInput.id
+          ? `#${textInput.id}`
+          : textInput.name
+            ? `input[name="${textInput.name}"]`
+            : `input:nth-of-type(${textInput.index + 1})`;
+        console.log(`Trying fallback selector: ${selector}`);
+        try {
+          const input = await page.$(selector);
+          if (input) {
+            await input.click();
+            await delay(300);
+            await input.type(email, { delay: 50 });
+            emailEntered = true;
+            console.log(`Email entered using fallback: ${selector}`);
+          }
+        } catch (e) {
+          console.log('Fallback selector failed:', e);
+        }
       }
     }
 
