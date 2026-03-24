@@ -22,9 +22,11 @@ export async function connectToBrowserbase(): Promise<{ browser: Browser; liveVi
     // Browserbase SDK 초기화
     const bb = new Browserbase({ apiKey });
 
-    // 세션 생성 (한국 주거용 IP로 Kakao 차단 우회)
+    // 세션 생성 (한국 주거용 IP로 Kakao 차단 우회, keepAlive로 만료 방지)
     const session = await bb.sessions.create({
       projectId,
+      keepAlive: true,
+      timeout: 600, // 10분 타임아웃
       proxies: [
         {
           type: 'browserbase',

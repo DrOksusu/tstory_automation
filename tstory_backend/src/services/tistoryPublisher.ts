@@ -404,63 +404,29 @@ export async function publishToTistory(params: {
     console.log('Plain text length:', plainText.length);
     console.log('Plain text preview (first 300 chars):', plainText.substring(0, 300));
 
-    // 방법 1: ProseMirror 에디터에 직접 텍스트 입력
-    console.log('\n--- 방법 1: ProseMirror 직접 타이핑 ---');
+    // 방법 1: ProseMirror 에디터에 HTML 직접 주입
+    console.log('\n--- 방법 1: ProseMirror HTML 주입 ---');
     try {
       const proseMirror = await page.$('.ProseMirror');
       if (proseMirror) {
         console.log('ProseMirror 요소 발견');
 
-        // 바운딩 박스 확인
         const box = await proseMirror.boundingBox();
-        console.log('ProseMirror boundingBox:', box);
-
         if (box && box.height > 50) {
-          // 에디터 중앙 클릭
-          await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2);
-          console.log('에디터 클릭 완료');
-          await delay(500);
-
-          // 포커스 확인
-          const hasFocus = await page.evaluate(() => {
+          console.log(`ProseMirror HTML 주입 시작 (${content.length}자)...`);
+          const injected = await page.evaluate((htmlContent: string) => {
             const pm = document.querySelector('.ProseMirror');
-            return pm === document.activeElement || pm?.contains(document.activeElement);
-          });
-          console.log('포커스 상태:', hasFocus);
-
-          // 테스트 텍스트 먼저 입력해보기
-          console.log('테스트 텍스트 입력 시도...');
-          await page.keyboard.type('테스트 본문입니다. ', { delay: 50 });
-          await delay(500);
-
-          // 입력 확인
-          const testContent = await page.evaluate(() => {
-            const pm = document.querySelector('.ProseMirror');
-            return pm?.textContent || '';
-          });
-          console.log('테스트 입력 후 내용:', testContent);
-
-          if (testContent.includes('테스트')) {
-            console.log('테스트 입력 성공! 본문 전체 입력 시작...');
-
-            // 나머지 본문 입력 (청크 단위)
-            const chunkSize = 200;
-            const chunks: string[] = [];
-            for (let i = 0; i < plainText.length; i += chunkSize) {
-              chunks.push(plainText.substring(i, i + chunkSize));
+            if (pm) {
+              pm.innerHTML = htmlContent;
+              pm.dispatchEvent(new Event('input', { bubbles: true }));
+              return pm.textContent?.length || 0;
             }
+            return 0;
+          }, content);
 
-            console.log(`총 ${chunks.length}개 청크 입력 예정`);
-
-            for (let i = 0; i < Math.min(chunks.length, 5); i++) { // 처음 5개 청크만 테스트
-              await page.keyboard.type(chunks[i], { delay: 0 });
-              console.log(`청크 ${i + 1}/${chunks.length} 입력 완료`);
-              await delay(50);
-            }
-
+          console.log(`ProseMirror 주입 완료, 텍스트 길이: ${injected}자`);
+          if (injected > 50) {
             contentEntered = true;
-          } else {
-            console.log('테스트 입력 실패 - 다른 방법 시도');
           }
         } else {
           console.log('ProseMirror boundingBox가 유효하지 않음');
@@ -472,9 +438,9 @@ export async function publishToTistory(params: {
       console.log('방법 1 실패:', e);
     }
 
-    // 방법 2: iframe 내부 에디터 확인 (티스토리 기본 에디터)
+    // 방법 2: iframe 내부 에디터에 HTML 직접 주입 (타이핑 대신 evaluate 사용)
     if (!contentEntered) {
-      console.log('\n--- 방법 2: iframe 내부 에디터 확인 ---');
+      console.log('\n--- 방법 2: iframe 에디터에 HTML 직접 주입 ---');
       try {
         const iframes = await page.$$('iframe');
         console.log(`iframe 개수: ${iframes.length}`);
@@ -485,41 +451,27 @@ export async function publishToTistory(params: {
             const editorInFrame = await frame.$('[contenteditable="true"], body');
             if (editorInFrame) {
               const box = await editorInFrame.boundingBox();
-              // 에디터 영역인지 확인 (충분히 큰 영역)
               if (box && box.height > 100) {
                 console.log(`iframe ${i}에서 에디터 발견 (크기: ${box.width}x${box.height})`);
-                await editorInFrame.click();
-                await delay(500);
 
-                // 전체 본문 입력 (청크 단위)
-                console.log(`전체 본문 입력 시작 (${plainText.length}자)...`);
-
-                const chunkSize = 300;
-                const chunks: string[] = [];
-                for (let j = 0; j < plainText.length; j += chunkSize) {
-                  chunks.push(plainText.substring(j, j + chunkSize));
-                }
-
-                console.log(`총 ${chunks.length}개 청크로 분할`);
-
-                for (let j = 0; j < chunks.length; j++) {
-                  await page.keyboard.type(chunks[j], { delay: 0 });
-                  if ((j + 1) % 5 === 0 || j === chunks.length - 1) {
-                    console.log(`청크 ${j + 1}/${chunks.length} 입력 완료`);
-                  }
-                  await delay(50); // 청크 사이 짧은 대기
-                }
-
-                // 입력 확인
-                const iframeContent = await frame.evaluate(() => {
+                // HTML을 evaluate로 즉시 주입 (타이핑 대신)
+                console.log(`HTML 직접 주입 시작 (${content.length}자)...`);
+                const injected = await frame.evaluate((htmlContent: string) => {
                   const body = document.body;
-                  return body?.textContent?.length || 0;
-                });
+                  if (body) {
+                    body.innerHTML = htmlContent;
+                    // 입력 이벤트 발생시켜 에디터가 변경을 인식하도록 함
+                    body.dispatchEvent(new Event('input', { bubbles: true }));
+                    body.dispatchEvent(new Event('change', { bubbles: true }));
+                    return body.textContent?.length || 0;
+                  }
+                  return 0;
+                }, content);
 
-                console.log(`iframe 에디터 내용 길이: ${iframeContent}자`);
+                console.log(`HTML 주입 완료, 텍스트 길이: ${injected}자`);
 
-                if (iframeContent > 100) {
-                  console.log('iframe 본문 입력 성공!');
+                if (injected > 50) {
+                  console.log('iframe HTML 주입 성공!');
                   contentEntered = true;
                   break;
                 }
