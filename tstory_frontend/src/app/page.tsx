@@ -443,51 +443,104 @@ export default function Home() {
       )}
 
       {/* 발행 진행 상태 모달 */}
-      {publishProgress && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center">
-          <div className="fixed inset-0 bg-black/50 backdrop-blur-sm" />
-          <div className="relative bg-white rounded-2xl shadow-2xl p-8 max-w-md w-full mx-4">
-            <h3 className="text-xl font-bold text-slate-800 text-center mb-6">
-              {loadingType === 'preview' ? 'AI 글 생성 중' : '발행 진행 중'}
-            </h3>
-            <div className="mb-6">
-              <div className="flex items-center justify-between mb-2">
-                <div className="relative flex-1 h-3 bg-slate-200 rounded-full overflow-hidden">
-                  <div
-                    className="absolute left-0 top-0 h-full bg-gradient-to-r from-orange-500 to-red-500 transition-all duration-500"
-                    style={{ width: `${Math.round((publishProgress.step / publishProgress.totalSteps) * 100)}%` }}
-                  />
+      {publishProgress && (() => {
+        // 2FA 메시지 파싱: "2FA_REQUIRED|liveViewUrl|remainingSeconds"
+        const is2FA = publishProgress.message.startsWith('2FA_REQUIRED|');
+        let twoFAUrl = '';
+        let twoFARemaining = 0;
+        if (is2FA) {
+          const parts = publishProgress.message.split('|');
+          twoFAUrl = parts[1] || '';
+          twoFARemaining = parseInt(parts[2] || '0', 10);
+        }
+
+        return (
+          <div className="fixed inset-0 z-50 flex items-center justify-center">
+            <div className="fixed inset-0 bg-black/50 backdrop-blur-sm" />
+            <div className="relative bg-white rounded-2xl shadow-2xl p-8 max-w-md w-full mx-4">
+              <h3 className="text-xl font-bold text-slate-800 text-center mb-6">
+                {is2FA ? '2FA 인증 필요' : loadingType === 'preview' ? 'AI 글 생성 중' : '발행 진행 중'}
+              </h3>
+              <div className="mb-6">
+                <div className="flex items-center justify-between mb-2">
+                  <div className="relative flex-1 h-3 bg-slate-200 rounded-full overflow-hidden">
+                    <div
+                      className={`absolute left-0 top-0 h-full transition-all duration-500 ${
+                        is2FA
+                          ? 'bg-gradient-to-r from-yellow-400 to-amber-500'
+                          : 'bg-gradient-to-r from-orange-500 to-red-500'
+                      }`}
+                      style={{
+                        width: is2FA
+                          ? `${Math.round((twoFARemaining / 120) * 100)}%`
+                          : `${Math.round((publishProgress.step / publishProgress.totalSteps) * 100)}%`,
+                      }}
+                    />
+                  </div>
+                  <span className="ml-3 text-sm font-bold text-slate-600 min-w-[3rem] text-right">
+                    {is2FA
+                      ? `${twoFARemaining}초`
+                      : `${Math.round((publishProgress.step / publishProgress.totalSteps) * 100)}%`}
+                  </span>
                 </div>
-                <span className="ml-3 text-sm font-bold text-slate-600 min-w-[3rem] text-right">
-                  {Math.round((publishProgress.step / publishProgress.totalSteps) * 100)}%
-                </span>
               </div>
-            </div>
-            <div className="text-center">
-              <div className="flex items-center justify-center gap-2">
-                <svg className="animate-spin h-5 w-5 text-orange-500" viewBox="0 0 24 24">
-                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
-                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
-                </svg>
-                <span className="text-lg font-medium text-slate-700">{publishProgress.message}</span>
-              </div>
-              {/* 경과시간 / 예상시간 표시 */}
-              <div className="mt-4 space-y-1 text-sm text-slate-500">
-                {publishProgress.elapsedMs != null && (
-                  <p>경과: {formatDuration(publishProgress.elapsedMs)}</p>
+              <div className="text-center">
+                {is2FA ? (
+                  <>
+                    <div className="flex items-center justify-center gap-2 mb-3">
+                      <svg className="h-6 w-6 text-amber-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                      </svg>
+                      <span className="text-lg font-bold text-amber-600">2FA 인증이 필요합니다!</span>
+                    </div>
+                    <p className="text-sm text-slate-600 mb-4">
+                      {twoFARemaining}초 내에 인증을 완료해주세요.
+                      <br />
+                      인증 완료 시 자동으로 발행이 계속됩니다.
+                    </p>
+                    {twoFAUrl && (
+                      <a
+                        href={twoFAUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center gap-2 px-5 py-2.5 bg-amber-500 hover:bg-amber-600 text-white font-medium rounded-lg transition-colors"
+                      >
+                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                        </svg>
+                        인증하기 (라이브 뷰)
+                      </a>
+                    )}
+                  </>
+                ) : (
+                  <>
+                    <div className="flex items-center justify-center gap-2">
+                      <svg className="animate-spin h-5 w-5 text-orange-500" viewBox="0 0 24 24">
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
+                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                      </svg>
+                      <span className="text-lg font-medium text-slate-700">{publishProgress.message}</span>
+                    </div>
+                    {/* 경과시간 / 예상시간 표시 */}
+                    <div className="mt-4 space-y-1 text-sm text-slate-500">
+                      {publishProgress.elapsedMs != null && (
+                        <p>경과: {formatDuration(publishProgress.elapsedMs)}</p>
+                      )}
+                      {publishProgress.estimatedTotalMs != null && publishProgress.elapsedMs != null ? (
+                        <p>
+                          예상 남은 시간: ~{formatDuration(Math.max(0, publishProgress.estimatedTotalMs - publishProgress.elapsedMs))}
+                        </p>
+                      ) : publishProgress.elapsedMs != null ? (
+                        <p className="text-slate-400">예상 시간 수집 중...</p>
+                      ) : null}
+                    </div>
+                  </>
                 )}
-                {publishProgress.estimatedTotalMs != null && publishProgress.elapsedMs != null ? (
-                  <p>
-                    예상 남은 시간: ~{formatDuration(Math.max(0, publishProgress.estimatedTotalMs - publishProgress.elapsedMs))}
-                  </p>
-                ) : publishProgress.elapsedMs != null ? (
-                  <p className="text-slate-400">예상 시간 수집 중...</p>
-                ) : null}
               </div>
             </div>
           </div>
-        </div>
-      )}
+        );
+      })()}
 
       {/* 결과 모달 */}
       {publishResult && (

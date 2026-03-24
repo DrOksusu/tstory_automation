@@ -32,6 +32,7 @@ export async function publishToTistory(params: {
 
   let browser: Browser | null = null;
   let useBrowserbase = false;
+  let liveViewUrl: string | undefined;
 
   try {
     report('브라우저를 실행하는 중...');
@@ -41,8 +42,9 @@ export async function publishToTistory(params: {
 
     if (useBrowserbase) {
       console.log('Connecting to Browserbase for publishing...');
-      const { browser: connectedBrowser } = await connectToBrowserbase();
-      browser = connectedBrowser;
+      const result = await connectToBrowserbase();
+      browser = result.browser;
+      liveViewUrl = result.liveViewUrl;
       console.log('Connected to Browserbase');
     } else {
       // 로컬 Puppeteer 사용
@@ -121,7 +123,18 @@ export async function publishToTistory(params: {
         throw new Error('로그인이 만료되었고 저장된 자격증명이 없습니다. 프론트엔드에서 다시 로그인해주세요.');
       }
 
-      const loginSuccess = await loginToTistory(page, credentials, ownerEmail);
+      // 2FA 대기 시 프론트엔드에 라이브 뷰 URL 포함하여 진행 상태 전달
+      const loginProgress = (msg: string) => {
+        if (msg.startsWith('2FA_REQUIRED|')) {
+          const remainingSec = msg.split('|')[1];
+          const fullMsg = liveViewUrl
+            ? `2FA_REQUIRED|${liveViewUrl}|${remainingSec}`
+            : `2FA_REQUIRED||${remainingSec}`;
+          report(fullMsg);
+        }
+      };
+
+      const loginSuccess = await loginToTistory(page, credentials, ownerEmail, loginProgress);
       if (!loginSuccess) {
         throw new Error('자동 재로그인에 실패했습니다. 2FA가 필요하면 프론트엔드에서 수동 로그인해주세요.');
       }

@@ -70,7 +70,7 @@ export async function isLoggedIn(page: Page): Promise<boolean> {
 /**
  * 카카오 계정으로 티스토리 로그인
  */
-export async function loginToTistory(page: Page, credentials?: { email: string; password: string }, ownerEmail?: string): Promise<boolean> {
+export async function loginToTistory(page: Page, credentials?: { email: string; password: string }, ownerEmail?: string, onProgress?: (message: string) => void): Promise<boolean> {
   // 인자로 받은 credentials가 없으면 config에서 가져옴
   const email = credentials?.email || config.kakao.email;
   const password = credentials?.password || config.kakao.password;
@@ -299,6 +299,29 @@ export async function loginToTistory(page: Page, credentials?: { email: string; 
         } catch {
           continue;
         }
+      }
+
+      // 계속하기 버튼 클릭 후에도 여전히 카카오 페이지면 2FA 대기
+      const afterContinueUrl = page.url();
+      if (afterContinueUrl.includes('kauth.kakao.com') || afterContinueUrl.includes('accounts.kakao.com')) {
+        console.log('Still on Kakao page after continue button - 2FA may be required');
+        console.log('Waiting up to 120 seconds for user to complete 2FA...');
+
+        for (let remaining = 120; remaining > 0; remaining -= 2) {
+          onProgress?.(`2FA_REQUIRED|${remaining}`);
+          await delay(2000);
+
+          const checkUrl = page.url();
+          if (checkUrl.includes('tistory.com') && !checkUrl.includes('login')) {
+            console.log('2FA completed successfully!');
+            await saveCookies(page, email, ownerEmail);
+            return true;
+          }
+        }
+
+        console.log('2FA wait timeout (120s)');
+        await page.screenshot({ path: 'tistory-2fa-timeout.png', fullPage: true });
+        return false;
       }
     }
 

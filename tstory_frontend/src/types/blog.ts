@@ -26,6 +26,9 @@ export interface PublishProgress {
   totalSteps: number;
   elapsedMs?: number;
   estimatedTotalMs?: number | null;
+  requires2FA?: boolean;
+  liveViewUrl?: string;
+  remainingSeconds?: number;
 }
 
 export interface AddAccountStatus {
