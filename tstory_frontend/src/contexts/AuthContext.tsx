@@ -48,13 +48,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       try {
         const parsed = JSON.parse(savedUser);
         setUser(parsed);
-        refreshAdminStatus(parsed.email);
+        refreshAdminStatus(parsed.email).then(() => setIsLoading(false));
       } catch (e) {
         console.error('Failed to parse saved user:', e);
         localStorage.removeItem(AUTH_STORAGE_KEY);
+        setIsLoading(false);
       }
+    } else {
+      setIsLoading(false);
     }
-    setIsLoading(false);
   }, [refreshAdminStatus]);
 
   const login = (email: string) => {
