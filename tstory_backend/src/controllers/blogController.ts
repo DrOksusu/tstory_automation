@@ -4,7 +4,7 @@ import { publishToTistory } from '../services/tistoryService';
 import { cleanHtml, cleanMetaDescription } from '../utils/htmlProcessor';
 import prisma from '../services/prismaClient';
 import { GenerateBlogRequest, BlogGenerationResult } from '../types';
-import { logApiError } from '../services/errorLogService';
+import { logApiError, logError } from '../services/errorLogService';
 
 // ==================== 폴링 기반 발행 작업 관리 ====================
 
@@ -200,9 +200,18 @@ async function runGenerateTask(
         data: { status: 'failed' },
       });
 
+      const failMessage = tistoryResult.error || '티스토리 발행 실패';
       task.status = 'failed';
-      task.message = tistoryResult.error || '티스토리 발행 실패';
-      task.error = task.message;
+      task.message = failMessage;
+      task.error = failMessage;
+
+      await logError({
+        endpoint: '/api/blog/start-generate (tistory-publish)',
+        method: 'POST',
+        statusCode: 500,
+        errorMessage: failMessage,
+        requestBody: { sourceUrl, mainKeyword, regionKeyword, userEmail },
+      });
       return;
     }
 
@@ -231,10 +240,20 @@ async function runGenerateTask(
 
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+    const errorStack = error instanceof Error ? error.stack : undefined;
     console.error(`[${taskId}] Error:`, errorMessage);
     task.status = 'failed';
     task.message = errorMessage;
     task.error = errorMessage;
+
+    await logError({
+      endpoint: '/api/blog/start-generate (background)',
+      method: 'POST',
+      statusCode: 500,
+      errorMessage,
+      errorStack,
+      requestBody: { sourceUrl, mainKeyword, regionKeyword, aiModel },
+    });
   } finally {
     // 30분 후 작업 정리
     setTimeout(() => {
@@ -357,9 +376,18 @@ async function runPublishContentTask(
         data: { status: 'failed' },
       });
 
+      const failMessage = tistoryResult.error || '티스토리 발행 실패';
       task.status = 'failed';
-      task.message = tistoryResult.error || '티스토리 발행 실패';
-      task.error = task.message;
+      task.message = failMessage;
+      task.error = failMessage;
+
+      await logError({
+        endpoint: '/api/blog/publish-content (tistory-publish)',
+        method: 'POST',
+        statusCode: 500,
+        errorMessage: failMessage,
+        requestBody: { title, userEmail },
+      });
       return;
     }
 
@@ -388,10 +416,20 @@ async function runPublishContentTask(
 
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+    const errorStack = error instanceof Error ? error.stack : undefined;
     console.error(`[${taskId}] Error:`, errorMessage);
     task.status = 'failed';
     task.message = errorMessage;
     task.error = errorMessage;
+
+    await logError({
+      endpoint: '/api/blog/publish-content (background)',
+      method: 'POST',
+      statusCode: 500,
+      errorMessage,
+      errorStack,
+      requestBody: { title },
+    });
   } finally {
     // 30분 후 작업 정리
     setTimeout(() => {
@@ -679,10 +717,20 @@ async function runPreviewTask(
 
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+    const errorStack = error instanceof Error ? error.stack : undefined;
     console.error(`[${taskId}] Preview error:`, errorMessage);
     task.status = 'failed';
     task.message = errorMessage;
     task.error = errorMessage;
+
+    await logError({
+      endpoint: '/api/blog/start-preview (background)',
+      method: 'POST',
+      statusCode: 500,
+      errorMessage,
+      errorStack,
+      requestBody: { sourceUrl, mainKeyword, regionKeyword, aiModel },
+    });
   } finally {
     // 30분 후 작업 정리
     setTimeout(() => {
