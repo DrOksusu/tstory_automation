@@ -90,6 +90,7 @@ jobs:
               -e AWS_S3_BUCKET=space0101-images \
               -e CREDENTIAL_ENCRYPTION_KEY="${{ secrets.CREDENTIAL_ENCRYPTION_KEY }}" \
               -e NEXT_PUBLIC_FRONTEND_URL="${{ secrets.NEXT_PUBLIC_FRONTEND_URL }}" \
+              -e ADMIN_EMAILS="${{ secrets.ADMIN_EMAILS }}" \
               ${{ secrets.DOCKERHUB_USERNAME }}/tstory-backend:latest
 
             # 미사용 이미지 정리
