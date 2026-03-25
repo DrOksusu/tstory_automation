@@ -18,6 +18,7 @@ export function useBlogPublish(selectedAccount: string | null) {
     sourceUrl: '',
     mainKeyword: '',
     regionKeyword: '',
+    aiModel: 'claude' as 'claude' | 'gemini',
   });
 
   // 미리보기 요청 (폴링 방식)
@@ -39,7 +40,7 @@ export function useBlogPublish(selectedAccount: string | null) {
       const startResponse = await fetch('/api/blog/start-preview', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(formData),
+        body: JSON.stringify({ ...formData, aiModel: formData.aiModel }),
       });
 
       const startResult = await safeJsonParse(startResponse);
@@ -160,7 +161,7 @@ export function useBlogPublish(selectedAccount: string | null) {
       const startResponse = await fetch('/api/blog/start-generate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ...formData, userEmail: selectedAccount, ownerEmail }),
+        body: JSON.stringify({ ...formData, aiModel: formData.aiModel, userEmail: selectedAccount, ownerEmail }),
       });
 
       const startResult = await safeJsonParse(startResponse);

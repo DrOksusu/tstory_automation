@@ -4,6 +4,7 @@ interface FormData {
   sourceUrl: string;
   mainKeyword: string;
   regionKeyword: string;
+  aiModel: 'claude' | 'gemini';
 }
 
 interface BlogFormProps {
@@ -23,7 +24,7 @@ export default function BlogForm({
   loading,
   loadingType,
 }: BlogFormProps) {
-  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
     const { name, value } = e.target;
     setFormData({ ...formData, [name]: value });
   };
@@ -107,6 +108,70 @@ export default function BlogForm({
             <p className="mt-1.5 text-xs text-slate-500">
               제목에 포함될 지역 키워드
             </p>
+          </div>
+        </div>
+
+        {/* AI 모델 선택 */}
+        <div>
+          <label className="block text-sm font-medium text-slate-700 mb-2">
+            AI 모델
+          </label>
+          <div className="flex gap-3">
+            <label
+              className={`flex-1 flex items-center gap-3 p-3 border-2 rounded-xl cursor-pointer transition-all ${
+                formData.aiModel === 'claude'
+                  ? 'border-orange-500 bg-orange-50'
+                  : 'border-slate-200 hover:border-slate-300'
+              }`}
+            >
+              <input
+                type="radio"
+                name="aiModel"
+                value="claude"
+                checked={formData.aiModel === 'claude'}
+                onChange={handleChange}
+                disabled={loading}
+                className="sr-only"
+              />
+              <div className={`w-4 h-4 rounded-full border-2 flex items-center justify-center ${
+                formData.aiModel === 'claude' ? 'border-orange-500 bg-orange-500' : 'border-slate-300'
+              }`}>
+                {formData.aiModel === 'claude' && (
+                  <div className="w-1.5 h-1.5 bg-white rounded-full" />
+                )}
+              </div>
+              <div>
+                <span className="font-medium text-slate-800">Claude</span>
+                <span className="text-xs text-slate-500 ml-1">(기본)</span>
+              </div>
+            </label>
+            <label
+              className={`flex-1 flex items-center gap-3 p-3 border-2 rounded-xl cursor-pointer transition-all ${
+                formData.aiModel === 'gemini'
+                  ? 'border-blue-500 bg-blue-50'
+                  : 'border-slate-200 hover:border-slate-300'
+              }`}
+            >
+              <input
+                type="radio"
+                name="aiModel"
+                value="gemini"
+                checked={formData.aiModel === 'gemini'}
+                onChange={handleChange}
+                disabled={loading}
+                className="sr-only"
+              />
+              <div className={`w-4 h-4 rounded-full border-2 flex items-center justify-center ${
+                formData.aiModel === 'gemini' ? 'border-blue-500 bg-blue-500' : 'border-slate-300'
+              }`}>
+                {formData.aiModel === 'gemini' && (
+                  <div className="w-1.5 h-1.5 bg-white rounded-full" />
+                )}
+              </div>
+              <div>
+                <span className="font-medium text-slate-800">Gemini</span>
+              </div>
+            </label>
           </div>
         </div>
 
