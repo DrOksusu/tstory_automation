@@ -112,67 +112,20 @@ export default function BlogForm({
         </div>
 
         {/* AI 모델 선택 */}
-        <div>
-          <label className="block text-sm font-medium text-slate-700 mb-2">
+        <div className="flex items-center gap-3">
+          <label className="text-sm font-medium text-slate-700 whitespace-nowrap">
             AI 모델
           </label>
-          <div className="flex gap-3">
-            <label
-              className={`flex-1 flex items-center gap-3 p-3 border-2 rounded-xl cursor-pointer transition-all ${
-                formData.aiModel === 'claude'
-                  ? 'border-orange-500 bg-orange-50'
-                  : 'border-slate-200 hover:border-slate-300'
-              }`}
-            >
-              <input
-                type="radio"
-                name="aiModel"
-                value="claude"
-                checked={formData.aiModel === 'claude'}
-                onChange={handleChange}
-                disabled={loading}
-                className="sr-only"
-              />
-              <div className={`w-4 h-4 rounded-full border-2 flex items-center justify-center ${
-                formData.aiModel === 'claude' ? 'border-orange-500 bg-orange-500' : 'border-slate-300'
-              }`}>
-                {formData.aiModel === 'claude' && (
-                  <div className="w-1.5 h-1.5 bg-white rounded-full" />
-                )}
-              </div>
-              <div>
-                <span className="font-medium text-slate-800">Claude</span>
-                <span className="text-xs text-slate-500 ml-1">(기본)</span>
-              </div>
-            </label>
-            <label
-              className={`flex-1 flex items-center gap-3 p-3 border-2 rounded-xl cursor-pointer transition-all ${
-                formData.aiModel === 'gemini'
-                  ? 'border-blue-500 bg-blue-50'
-                  : 'border-slate-200 hover:border-slate-300'
-              }`}
-            >
-              <input
-                type="radio"
-                name="aiModel"
-                value="gemini"
-                checked={formData.aiModel === 'gemini'}
-                onChange={handleChange}
-                disabled={loading}
-                className="sr-only"
-              />
-              <div className={`w-4 h-4 rounded-full border-2 flex items-center justify-center ${
-                formData.aiModel === 'gemini' ? 'border-blue-500 bg-blue-500' : 'border-slate-300'
-              }`}>
-                {formData.aiModel === 'gemini' && (
-                  <div className="w-1.5 h-1.5 bg-white rounded-full" />
-                )}
-              </div>
-              <div>
-                <span className="font-medium text-slate-800">Gemini</span>
-              </div>
-            </label>
-          </div>
+          <select
+            name="aiModel"
+            value={formData.aiModel}
+            onChange={handleChange}
+            disabled={loading}
+            className="px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-orange-500 focus:border-orange-500 outline-none bg-white"
+          >
+            <option value="claude">Claude (기본)</option>
+            <option value="gemini">Gemini</option>
+          </select>
         </div>
 
         {/* 버튼 */}
