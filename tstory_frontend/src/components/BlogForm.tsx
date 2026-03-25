@@ -1,5 +1,7 @@
 'use client';
 
+import type { RecentPost } from '../hooks/useBlogPublish';
+
 interface FormData {
   sourceUrl: string;
   mainKeyword: string;
@@ -15,6 +17,7 @@ interface BlogFormProps {
   onPublish: () => void;
   loading: boolean;
   loadingType: 'preview' | 'publish' | null;
+  recentPosts?: RecentPost[];
 }
 
 export default function BlogForm({
@@ -24,17 +27,66 @@ export default function BlogForm({
   onPublish,
   loading,
   loadingType,
+  recentPosts = [],
 }: BlogFormProps) {
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
     const { name, value } = e.target;
     setFormData({ ...formData, [name]: value });
   };
 
+  // 최근 기록 선택 시 폼 자동 채움
+  const handleRecentSelect = (e: React.ChangeEvent<HTMLSelectElement>) => {
+    const postId = Number(e.target.value);
+    if (!postId) return;
+    const post = recentPosts.find((p) => p.id === postId);
+    if (post) {
+      setFormData({
+        ...formData,
+        sourceUrl: post.sourceUrl,
+        mainKeyword: post.mainKeyword,
+        regionKeyword: post.regionKeyword,
+      });
+    }
+  };
+
+  // datalist에 추가할 최근 기록의 고유 키워드
+  const recentMainKeywords = [...new Set(recentPosts.map((p) => p.mainKeyword))];
+  const recentRegionKeywords = [...new Set(recentPosts.map((p) => p.regionKeyword))];
+  const defaultMainKeywords = ['임플란트', '치아교정', '라미네이트', '충치치료', '스케일링', '치아미백', '사랑니발치', '신경치료'];
+  const defaultRegionKeywords = ['이수역', '사당', '사당동', '방배동', '동작구'];
+  const allMainKeywords = [...new Set([...recentMainKeywords, ...defaultMainKeywords])];
+  const allRegionKeywords = [...new Set([...recentRegionKeywords, ...defaultRegionKeywords])];
+
   return (
     <div className="bg-white rounded-2xl p-6 shadow-sm border border-slate-200">
       <h3 className="text-lg font-semibold text-slate-800 mb-6">글 작성 정보</h3>
 
       <div className="space-y-5">
+        {/* 최근 작성 기록 드롭다운 */}
+        {recentPosts.length > 0 && (
+          <div>
+            <label className="block text-sm font-medium text-slate-700 mb-2">
+              최근 작성 기록
+            </label>
+            <select
+              onChange={handleRecentSelect}
+              defaultValue=""
+              disabled={loading}
+              className="w-full px-4 py-3 border border-slate-300 rounded-xl focus:ring-2 focus:ring-orange-500 focus:border-orange-500 transition-all outline-none bg-white text-sm"
+            >
+              <option value="">최근 기록에서 선택...</option>
+              {recentPosts.map((post) => (
+                <option key={post.id} value={post.id}>
+                  {new Date(post.createdAt).toLocaleDateString('ko-KR')} | {post.mainKeyword} | {post.regionKeyword}
+                </option>
+              ))}
+            </select>
+            <p className="mt-1.5 text-xs text-slate-500">
+              최근 기록을 선택하면 URL, 키워드가 자동으로 채워집니다
+            </p>
+          </div>
+        )}
+
         {/* 참고 URL */}
         <div>
           <label className="block text-sm font-medium text-slate-700 mb-2">
@@ -71,14 +123,9 @@ export default function BlogForm({
               disabled={loading}
             />
             <datalist id="mainKeywordList">
-              <option value="임플란트" />
-              <option value="치아교정" />
-              <option value="라미네이트" />
-              <option value="충치치료" />
-              <option value="스케일링" />
-              <option value="치아미백" />
-              <option value="사랑니발치" />
-              <option value="신경치료" />
+              {allMainKeywords.map((kw) => (
+                <option key={kw} value={kw} />
+              ))}
             </datalist>
             <p className="mt-1.5 text-xs text-slate-500">
               글 본문에 자연스럽게 삽입될 메인 키워드
@@ -100,11 +147,9 @@ export default function BlogForm({
               disabled={loading}
             />
             <datalist id="regionKeywordList">
-              <option value="이수역" />
-              <option value="사당" />
-              <option value="사당동" />
-              <option value="방배동" />
-              <option value="동작구" />
+              {allRegionKeywords.map((kw) => (
+                <option key={kw} value={kw} />
+              ))}
             </datalist>
             <p className="mt-1.5 text-xs text-slate-500">
               제목에 포함될 지역 키워드

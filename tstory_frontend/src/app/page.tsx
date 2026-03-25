@@ -68,6 +68,7 @@ export default function Home() {
     publishProgress,
     formData,
     setFormData,
+    recentPosts,
     handlePreview,
     handlePublish,
     handlePublishFromPreview,
@@ -235,6 +236,7 @@ export default function Home() {
         onPublish={handlePublishWithCheck}
         loading={loading}
         loadingType={loadingType}
+        recentPosts={recentPosts}
       />
 
       {/* 사용 가이드 */}

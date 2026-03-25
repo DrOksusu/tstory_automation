@@ -1,10 +1,18 @@
 // 블로그 미리보기/발행 관련 훅
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { safeJsonParse } from '../utils/api';
 import { useAuth } from '../contexts/AuthContext';
 import type { PreviewData, PublishResult, PublishProgress } from '../types/blog';
 // PreviewData는 폴링 결과에서도 사용됨
+
+export interface RecentPost {
+  id: number;
+  sourceUrl: string;
+  mainKeyword: string;
+  regionKeyword: string;
+  createdAt: string;
+}
 
 export function useBlogPublish(selectedAccount: string | null) {
   const { user } = useAuth();
@@ -14,6 +22,7 @@ export function useBlogPublish(selectedAccount: string | null) {
   const [previewData, setPreviewData] = useState<PreviewData | null>(null);
   const [publishResult, setPublishResult] = useState<PublishResult | null>(null);
   const [publishProgress, setPublishProgress] = useState<PublishProgress | null>(null);
+  const [recentPosts, setRecentPosts] = useState<RecentPost[]>([]);
   const [formData, setFormData] = useState({
     sourceUrl: '',
     mainKeyword: '',
@@ -21,6 +30,38 @@ export function useBlogPublish(selectedAccount: string | null) {
     customTopic: '',
     aiModel: 'claude' as 'claude' | 'gemini',
   });
+
+  // 마운트 시 최근 글 목록 로드 + 기본값 설정
+  useEffect(() => {
+    const fetchRecentPosts = async () => {
+      try {
+        const response = await fetch('/api/blog/posts');
+        const data = await response.json();
+        if (data.success && Array.isArray(data.posts)) {
+          const recent: RecentPost[] = data.posts.slice(0, 10).map((p: RecentPost) => ({
+            id: p.id,
+            sourceUrl: p.sourceUrl,
+            mainKeyword: p.mainKeyword,
+            regionKeyword: p.regionKeyword,
+            createdAt: p.createdAt,
+          }));
+          setRecentPosts(recent);
+          // 가장 최근 기록으로 기본값 채움
+          if (recent.length > 0) {
+            const latest = recent[0];
+            setFormData((prev) => ({
+              ...prev,
+              mainKeyword: latest.mainKeyword,
+              regionKeyword: latest.regionKeyword,
+            }));
+          }
+        }
+      } catch (error) {
+        console.error('최근 글 목록 로드 실패:', error);
+      }
+    };
+    fetchRecentPosts();
+  }, []);
 
   // 미리보기 요청 (폴링 방식)
   const handlePreview = async () => {
@@ -358,6 +399,7 @@ export function useBlogPublish(selectedAccount: string | null) {
     publishProgress,
     formData,
     setFormData,
+    recentPosts,
     handlePreview,
     handlePublish,
     handlePublishFromPreview,
