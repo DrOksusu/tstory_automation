@@ -18,6 +18,7 @@ export function useBlogPublish(selectedAccount: string | null) {
     sourceUrl: '',
     mainKeyword: '',
     regionKeyword: '',
+    customTopic: '',
     aiModel: 'claude' as 'claude' | 'gemini',
   });
 

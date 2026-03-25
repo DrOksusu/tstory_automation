@@ -12,12 +12,13 @@ const anthropic = new Anthropic({
 export async function generateBlogContentWithClaude(
   sourceUrl: string,
   mainKeyword: string,
-  regionKeyword: string
+  regionKeyword: string,
+  customTopic?: string
 ): Promise<GeneratedContent> {
   // 참고 링크에서 콘텐츠 스크래핑
   const sourceContent = await scrapeWebContent(sourceUrl);
 
-  const prompt = buildPrompt(mainKeyword, regionKeyword, sourceContent);
+  const prompt = buildPrompt(mainKeyword, regionKeyword, sourceContent, customTopic);
 
   const message = await anthropic.messages.create({
     model: 'claude-sonnet-4-20250514',

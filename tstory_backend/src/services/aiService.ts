@@ -7,13 +7,14 @@ export async function generateBlogContent(
   sourceUrl: string,
   mainKeyword: string,
   regionKeyword: string,
-  aiModel: 'gemini' | 'claude' = 'claude'
+  aiModel: 'gemini' | 'claude' = 'claude',
+  customTopic?: string
 ): Promise<GeneratedContent> {
   console.log(`AI 모델 선택: ${aiModel}`);
 
   if (aiModel === 'claude') {
-    return generateBlogContentWithClaude(sourceUrl, mainKeyword, regionKeyword);
+    return generateBlogContentWithClaude(sourceUrl, mainKeyword, regionKeyword, customTopic);
   }
 
-  return generateWithGemini(sourceUrl, mainKeyword, regionKeyword);
+  return generateWithGemini(sourceUrl, mainKeyword, regionKeyword, customTopic);
 }

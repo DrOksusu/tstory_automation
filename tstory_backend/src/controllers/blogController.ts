@@ -44,7 +44,7 @@ export async function startGenerate(
   req: Request<object, object, GenerateBlogRequest>,
   res: Response
 ): Promise<void> {
-  const { sourceUrl, mainKeyword, regionKeyword, userEmail, ownerEmail, aiModel } = req.body;
+  const { sourceUrl, mainKeyword, regionKeyword, customTopic, userEmail, ownerEmail, aiModel } = req.body;
 
   if (!sourceUrl || !mainKeyword || !regionKeyword) {
     res.status(400).json({
@@ -68,7 +68,7 @@ export async function startGenerate(
   generateTasks.set(taskId, task);
 
   // 백그라운드에서 작업 실행
-  runGenerateTask(taskId, sourceUrl, mainKeyword, regionKeyword, userEmail, aiModel, ownerEmail).catch((error) => {
+  runGenerateTask(taskId, sourceUrl, mainKeyword, regionKeyword, userEmail, aiModel, ownerEmail, customTopic).catch((error) => {
     console.error(`Generate task error for ${taskId}:`, error);
     const task = generateTasks.get(taskId);
     if (task) {
@@ -132,7 +132,8 @@ async function runGenerateTask(
   regionKeyword: string,
   userEmail?: string,
   aiModel?: 'gemini' | 'claude',
-  ownerEmail?: string
+  ownerEmail?: string,
+  customTopic?: string
 ): Promise<void> {
   const task = generateTasks.get(taskId);
   if (!task) return;
@@ -153,7 +154,8 @@ async function runGenerateTask(
       sourceUrl,
       mainKeyword,
       regionKeyword,
-      modelName
+      modelName,
+      customTopic
     );
 
     // 3. HTML 후처리
@@ -406,7 +408,7 @@ export async function generateAndPublish(
   req: Request<object, object, GenerateBlogRequest>,
   res: Response
 ): Promise<void> {
-  const { sourceUrl, mainKeyword, regionKeyword, userEmail, ownerEmail, aiModel } = req.body;
+  const { sourceUrl, mainKeyword, regionKeyword, customTopic, userEmail, ownerEmail, aiModel } = req.body;
 
   // 입력값 검증
   if (!sourceUrl || !mainKeyword || !regionKeyword) {
@@ -425,7 +427,8 @@ export async function generateAndPublish(
       sourceUrl,
       mainKeyword,
       regionKeyword,
-      modelName
+      modelName,
+      customTopic
     );
 
     // 2. HTML 후처리
@@ -510,7 +513,7 @@ export async function generatePreview(
   req: Request<object, object, GenerateBlogRequest>,
   res: Response
 ): Promise<void> {
-  const { sourceUrl, mainKeyword, regionKeyword, aiModel } = req.body;
+  const { sourceUrl, mainKeyword, regionKeyword, customTopic, aiModel } = req.body;
 
   if (!sourceUrl || !mainKeyword || !regionKeyword) {
     res.status(400).json({
@@ -527,7 +530,8 @@ export async function generatePreview(
       sourceUrl,
       mainKeyword,
       regionKeyword,
-      modelName
+      modelName,
+      customTopic
     );
 
     // HTML 후처리
@@ -559,7 +563,7 @@ export async function startPreview(
   req: Request<object, object, GenerateBlogRequest>,
   res: Response
 ): Promise<void> {
-  const { sourceUrl, mainKeyword, regionKeyword, aiModel } = req.body;
+  const { sourceUrl, mainKeyword, regionKeyword, customTopic, aiModel } = req.body;
 
   if (!sourceUrl || !mainKeyword || !regionKeyword) {
     res.status(400).json({
@@ -583,7 +587,7 @@ export async function startPreview(
   generateTasks.set(taskId, task);
 
   // 백그라운드에서 미리보기 작업 실행
-  runPreviewTask(taskId, sourceUrl, mainKeyword, regionKeyword, aiModel).catch((error) => {
+  runPreviewTask(taskId, sourceUrl, mainKeyword, regionKeyword, aiModel, customTopic).catch((error) => {
     console.error(`Preview task error for ${taskId}:`, error);
     const t = generateTasks.get(taskId);
     if (t) {
@@ -608,7 +612,8 @@ async function runPreviewTask(
   sourceUrl: string,
   mainKeyword: string,
   regionKeyword: string,
-  aiModel?: 'gemini' | 'claude'
+  aiModel?: 'gemini' | 'claude',
+  customTopic?: string
 ): Promise<void> {
   const task = generateTasks.get(taskId);
   if (!task) return;
@@ -630,7 +635,8 @@ async function runPreviewTask(
       sourceUrl,
       mainKeyword,
       regionKeyword,
-      modelName
+      modelName,
+      customTopic
     );
 
     // step 3/4: HTML 후처리

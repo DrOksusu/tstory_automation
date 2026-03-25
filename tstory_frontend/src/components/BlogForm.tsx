@@ -4,6 +4,7 @@ interface FormData {
   sourceUrl: string;
   mainKeyword: string;
   regionKeyword: string;
+  customTopic: string;
   aiModel: 'claude' | 'gemini';
 }
 
@@ -24,7 +25,7 @@ export default function BlogForm({
   loading,
   loadingType,
 }: BlogFormProps) {
-  const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
     const { name, value } = e.target;
     setFormData({ ...formData, [name]: value });
   };
@@ -109,6 +110,25 @@ export default function BlogForm({
               제목에 포함될 지역 키워드
             </p>
           </div>
+        </div>
+
+        {/* 핵심 주제 (선택) */}
+        <div>
+          <label className="block text-sm font-medium text-slate-700 mb-2">
+            핵심 주제 <span className="text-slate-400 font-normal">(선택)</span>
+          </label>
+          <textarea
+            name="customTopic"
+            value={formData.customTopic}
+            onChange={handleChange}
+            placeholder="예: 임플란트 시술 후 관리법을 중심으로, 환자가 자주 묻는 질문 Q&A 형태로 작성해주세요"
+            rows={2}
+            className="w-full px-4 py-3 border border-slate-300 rounded-xl focus:ring-2 focus:ring-orange-500 focus:border-orange-500 transition-all outline-none resize-none"
+            disabled={loading}
+          />
+          <p className="mt-1.5 text-xs text-slate-500">
+            AI가 글에 반영할 핵심 주제나 강조점을 자유롭게 입력하세요
+          </p>
         </div>
 
         {/* AI 모델 선택 */}

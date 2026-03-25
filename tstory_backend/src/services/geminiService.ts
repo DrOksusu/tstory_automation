@@ -8,12 +8,13 @@ const genAI = new GoogleGenerativeAI(config.gemini.apiKey);
 export async function generateBlogContent(
   sourceUrl: string,
   mainKeyword: string,
-  regionKeyword: string
+  regionKeyword: string,
+  customTopic?: string
 ): Promise<GeneratedContent> {
   // 참고 링크에서 콘텐츠 스크래핑
   const sourceContent = await scrapeWebContent(sourceUrl);
 
-  const prompt = buildPrompt(mainKeyword, regionKeyword, sourceContent);
+  const prompt = buildPrompt(mainKeyword, regionKeyword, sourceContent, customTopic);
 
   const model = genAI.getGenerativeModel({
     model: 'gemini-2.0-flash',
@@ -33,10 +34,15 @@ export async function generateBlogContent(
 export function buildPrompt(
   mainKeyword: string,
   regionKeyword: string,
-  sourceContent: string
+  sourceContent: string,
+  customTopic?: string
 ): string {
-  return `너는 상위 노출 1%를 만드는 검색엔진 최적화(SEO) 전문가이자 콘텐츠 에디터야. 아래 참고 내용을 바탕으로 검색엔진 최적화된 블로그 글을 HTML 형식으로 작성해줘.
+  const customTopicSection = customTopic
+    ? `\n## 핵심 주제\n${customTopic}\n`
+    : '';
 
+  return `너는 상위 노출 1%를 만드는 검색엔진 최적화(SEO) 전문가이자 콘텐츠 에디터야. 아래 참고 내용을 바탕으로 검색엔진 최적화된 블로그 글을 HTML 형식으로 작성해줘.
+${customTopicSection}
 ## 작성 규칙
 
 1. 메인 키워드는 '${mainKeyword}'야. 글 서론, 본론, 결론에 총 5회 자연스럽게 삽입해줘.

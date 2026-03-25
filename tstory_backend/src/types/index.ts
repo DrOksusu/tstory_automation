@@ -2,6 +2,7 @@ export interface GenerateBlogRequest {
   sourceUrl: string;      // 참고할 블로그 링크
   mainKeyword: string;    // 메인 키워드
   regionKeyword: string;  // 지역 키워드
+  customTopic?: string;   // 사용자 지정 핵심 주제 (선택)
   userEmail?: string;     // 사용자 이메일 (쿠키 로드용)
   ownerEmail?: string;    // 앱 로그인 사용자 (소유자)
   aiModel?: 'gemini' | 'claude';  // AI 모델 선택 (기본값: gemini)
