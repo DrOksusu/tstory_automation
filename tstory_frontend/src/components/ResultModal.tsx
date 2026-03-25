@@ -1,11 +1,16 @@
 'use client';
 
-interface PublishResult {
-  success: boolean;
-  postId?: number;
-  tistoryUrl?: string;
-  title?: string;
-  error?: string;
+import type { PublishResult } from '@/types/blog';
+
+// 밀리초를 "X분 Y초" 형식으로 변환
+function formatDuration(ms: number): string {
+  const totalSec = Math.round(ms / 1000);
+  const min = Math.floor(totalSec / 60);
+  const sec = totalSec % 60;
+  if (min > 0) {
+    return `${min}분 ${sec}초`;
+  }
+  return `${sec}초`;
 }
 
 interface ResultModalProps {
@@ -14,6 +19,16 @@ interface ResultModalProps {
 }
 
 export default function ResultModal({ result, onClose }: ResultModalProps) {
+  // 평균 대비 빠름/느림 계산
+  const getDurationComparison = () => {
+    if (!result.durationMs || !result.avgDurationMs) return null;
+    const diff = result.durationMs - result.avgDurationMs;
+    const absDiff = Math.abs(diff);
+    if (absDiff < 3000) return { label: '평균 수준', className: 'bg-slate-100 text-slate-600' };
+    if (diff < 0) return { label: `${formatDuration(absDiff)} 빠름`, className: 'bg-green-100 text-green-700' };
+    return { label: `${formatDuration(absDiff)} 느림`, className: 'bg-yellow-100 text-yellow-700' };
+  };
+
   return (
     <div className="fixed inset-0 z-50 overflow-y-auto">
       {/* 배경 오버레이 */}
@@ -66,6 +81,30 @@ export default function ResultModal({ result, onClose }: ResultModalProps) {
                     >
                       {result.tistoryUrl}
                     </a>
+                  </div>
+                )}
+
+                {/* 소요시간 섹션 */}
+                {result.durationMs && (
+                  <div className="border-t border-slate-200 pt-3">
+                    <span className="text-xs font-medium text-slate-500 uppercase">소요시간</span>
+                    <div className="flex items-center gap-2 mt-1">
+                      <p className="text-slate-800 font-medium">{formatDuration(result.durationMs)}</p>
+                      {(() => {
+                        const comparison = getDurationComparison();
+                        if (!comparison) return null;
+                        return (
+                          <span className={`px-2 py-0.5 text-xs font-medium rounded-full ${comparison.className}`}>
+                            {comparison.label}
+                          </span>
+                        );
+                      })()}
+                    </div>
+                    {result.avgDurationMs && (
+                      <p className="text-xs text-slate-500 mt-1">
+                        평균 소요시간: {formatDuration(result.avgDurationMs)}
+                      </p>
+                    )}
                   </div>
                 )}
               </div>

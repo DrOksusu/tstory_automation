@@ -12,6 +12,8 @@ export interface PublishResult {
   tistoryUrl?: string;
   title?: string;
   error?: string;
+  durationMs?: number;
+  avgDurationMs?: number | null;
 }
 
 export interface TistoryAccount {

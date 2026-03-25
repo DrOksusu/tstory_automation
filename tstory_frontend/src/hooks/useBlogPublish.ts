@@ -188,7 +188,7 @@ export function useBlogPublish(selectedAccount: string | null) {
           console.error('Status polling error:', statusResult.error);
           continue;
         }
-        const statusData = statusResult.data as { status: string; message: string; step?: number; totalSteps?: number; completed?: boolean; success?: boolean; result?: PublishResult; error?: string; elapsedMs?: number };
+        const statusData = statusResult.data as { status: string; message: string; step?: number; totalSteps?: number; completed?: boolean; success?: boolean; result?: PublishResult; error?: string; elapsedMs?: number; durationMs?: number };
 
         const fallback = getStepFromStatus(statusData.status);
         setPublishProgress({
@@ -203,7 +203,11 @@ export function useBlogPublish(selectedAccount: string | null) {
         if (statusData.completed) {
           setPublishProgress(null);
           if (statusData.success && statusData.result) {
-            setPublishResult(statusData.result);
+            setPublishResult({
+              ...statusData.result,
+              durationMs: statusData.result.durationMs ?? statusData.durationMs,
+              avgDurationMs: avgDurationMs,
+            });
           } else {
             setPublishResult({
               success: false,
@@ -290,7 +294,7 @@ export function useBlogPublish(selectedAccount: string | null) {
           console.error('Status polling error:', statusResult.error);
           continue;
         }
-        const statusData = statusResult.data as { status: string; message: string; step?: number; totalSteps?: number; completed?: boolean; success?: boolean; result?: PublishResult; error?: string; elapsedMs?: number };
+        const statusData = statusResult.data as { status: string; message: string; step?: number; totalSteps?: number; completed?: boolean; success?: boolean; result?: PublishResult; error?: string; elapsedMs?: number; durationMs?: number };
 
         const previewFallbackSteps: Record<string, number> = { 'pending': 1, 'publishing': 2, 'success': 3, 'failed': 3 };
         setPublishProgress({
@@ -305,7 +309,11 @@ export function useBlogPublish(selectedAccount: string | null) {
         if (statusData.completed) {
           setPublishProgress(null);
           if (statusData.success && statusData.result) {
-            setPublishResult(statusData.result);
+            setPublishResult({
+              ...statusData.result,
+              durationMs: statusData.result.durationMs ?? statusData.durationMs,
+              avgDurationMs: avgDurationMs,
+            });
           } else {
             setPublishResult({
               success: false,

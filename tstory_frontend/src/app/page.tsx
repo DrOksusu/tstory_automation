@@ -471,16 +471,27 @@ export default function Home() {
                           : 'bg-gradient-to-r from-orange-500 to-red-500'
                       }`}
                       style={{
-                        width: is2FA
-                          ? `${Math.round((twoFARemaining / 120) * 100)}%`
-                          : `${Math.round((publishProgress.step / publishProgress.totalSteps) * 100)}%`,
+                        width: (() => {
+                          if (is2FA) return `${Math.round((twoFARemaining / 120) * 100)}%`;
+                          // 시간 기반 프로그레스 (estimatedTotalMs가 있을 때)
+                          if (publishProgress.estimatedTotalMs && publishProgress.elapsedMs != null) {
+                            const timePercent = Math.min(95, Math.round((publishProgress.elapsedMs / publishProgress.estimatedTotalMs) * 100));
+                            return `${timePercent}%`;
+                          }
+                          // 기존 step 기반 프로그레스
+                          return `${Math.round((publishProgress.step / publishProgress.totalSteps) * 100)}%`;
+                        })(),
                       }}
                     />
                   </div>
                   <span className="ml-3 text-sm font-bold text-slate-600 min-w-[3rem] text-right">
-                    {is2FA
-                      ? `${twoFARemaining}초`
-                      : `${Math.round((publishProgress.step / publishProgress.totalSteps) * 100)}%`}
+                    {(() => {
+                      if (is2FA) return `${twoFARemaining}초`;
+                      if (publishProgress.estimatedTotalMs && publishProgress.elapsedMs != null) {
+                        return `${Math.min(95, Math.round((publishProgress.elapsedMs / publishProgress.estimatedTotalMs) * 100))}%`;
+                      }
+                      return `${Math.round((publishProgress.step / publishProgress.totalSteps) * 100)}%`;
+                    })()}
                   </span>
                 </div>
               </div>

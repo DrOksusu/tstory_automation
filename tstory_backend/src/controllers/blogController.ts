@@ -105,6 +105,7 @@ export function getGenerateStatus(req: Request, res: Response): void {
 
   const completed = ['success', 'failed'].includes(task.status);
   const elapsedMs = Date.now() - task.startedAt;
+  const durationMs = completed ? elapsedMs : undefined;
 
   res.json({
     success: task.status === 'success',
@@ -117,6 +118,7 @@ export function getGenerateStatus(req: Request, res: Response): void {
     previewResult: task.previewResult,
     error: task.error,
     elapsedMs,
+    durationMs,
   });
 }
 
@@ -220,6 +222,7 @@ async function runGenerateTask(
       postId: blogPost.id,
       tistoryUrl: tistoryResult.postUrl,
       title: generatedContent.title,
+      durationMs,
     };
 
     console.log(`[${taskId}] Blog post published successfully (${durationMs}ms):`, task.result);
@@ -376,6 +379,7 @@ async function runPublishContentTask(
       postId: blogPost.id,
       tistoryUrl: tistoryResult.postUrl,
       title: title,
+      durationMs,
     };
 
     console.log(`[${taskId}] Edited content published successfully (${durationMs}ms):`, task.result);

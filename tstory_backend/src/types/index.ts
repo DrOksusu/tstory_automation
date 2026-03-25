@@ -28,6 +28,7 @@ export interface BlogGenerationResult {
   tistoryUrl?: string;
   title?: string;
   error?: string;
+  durationMs?: number;
 }
 
 export interface TistoryPublishResult {
