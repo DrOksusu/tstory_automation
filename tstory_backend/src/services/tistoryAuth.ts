@@ -312,10 +312,41 @@ export async function loginToTistory(page: Page, credentials?: { email: string; 
           await delay(2000);
 
           const checkUrl = page.url();
-          if (checkUrl.includes('tistory.com') && !checkUrl.includes('login')) {
+
+          // 티스토리로 리다이렉트 완료 (OAuth 콜백 /auth/login?code= 제외)
+          if (checkUrl.includes('tistory.com') && !checkUrl.includes('/auth/login')) {
             console.log('2FA completed successfully!');
             await saveCookies(page, email, ownerEmail);
             return true;
+          }
+
+          // 2FA 완료 후 카카오 OAuth 동의("계속하기") 페이지가 다시 나타날 수 있음
+          if (checkUrl.includes('kauth.kakao.com') || checkUrl.includes('accounts.kakao.com')) {
+            try {
+              const continueBtn = await page.$('button.confirm, button[type="submit"], a.confirm');
+              if (continueBtn) {
+                const isVisible = await continueBtn.evaluate((el: Element) => {
+                  const rect = el.getBoundingClientRect();
+                  return rect.height > 0 && rect.width > 0;
+                });
+                if (isVisible) {
+                  console.log('2FA 후 "계속하기" 버튼 발견, 클릭...');
+                  await continueBtn.click();
+                  await delay(3000);
+                  await page.waitForNavigation({ waitUntil: 'networkidle2', timeout: 10000 }).catch(() => {});
+
+                  const afterClickUrl = page.url();
+                  console.log(`계속하기 클릭 후 URL: ${afterClickUrl}`);
+                  if (afterClickUrl.includes('tistory.com') && !afterClickUrl.includes('/auth/login')) {
+                    console.log('2FA + 계속하기 후 로그인 성공!');
+                    await saveCookies(page, email, ownerEmail);
+                    return true;
+                  }
+                }
+              }
+            } catch {
+              // 버튼 탐색 실패 무시
+            }
           }
         }
 
