@@ -374,6 +374,8 @@ export default function Home() {
                     ? 'bg-green-50 text-green-700 border border-green-200'
                     : addAccountStatus.liveViewUrl
                     ? 'bg-blue-50 text-blue-700 border border-blue-200'
+                    : addAccountStatus.message.includes('오류') || addAccountStatus.message.includes('실패') || addAccountStatus.message.includes('불러올 수 없')
+                    ? 'bg-red-50 text-red-700 border border-red-200'
                     : 'bg-yellow-50 text-yellow-700 border border-yellow-200'
                 }`}>
                   {/* 프로그레스 바 (step/totalSteps가 있을 때만) */}

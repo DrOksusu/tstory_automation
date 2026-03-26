@@ -86,13 +86,20 @@ export function useTistoryAccounts() {
       const params = ownerEmail ? `?ownerEmail=${encodeURIComponent(ownerEmail)}` : '';
       const response = await fetch(`/auth/credentials/${encodeURIComponent(email)}${params}`);
       const result = await safeJsonParse(response);
-      if (!result.ok || !result.data) return;
+      if (!result.ok || !result.data) {
+        const errorMsg = result.error || '저장된 비밀번호를 불러올 수 없습니다.';
+        setAddAccountStatus({ message: errorMsg });
+        return;
+      }
       const data = result.data as { success: boolean; credential: { email: string; password: string } };
       if (data.success && data.credential) {
         setNewAccountPassword(data.credential.password);
+      } else {
+        setAddAccountStatus({ message: '저장된 비밀번호가 없습니다. 직접 입력해주세요.' });
       }
     } catch (error) {
       console.error('Failed to fetch credential:', error);
+      setAddAccountStatus({ message: '비밀번호 조회 중 오류가 발생했습니다.' });
     }
   }, [ownerEmail]);
 

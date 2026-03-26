@@ -1,4 +1,48 @@
 import prisma from './prismaClient';
+import fs from 'fs';
+import path from 'path';
+
+// 파일 폴백 로그 경로 (Docker: /app/logs/, 로컬: {프로젝트}/logs/)
+const LOG_DIR = path.resolve(process.cwd(), 'logs');
+const FALLBACK_LOG_PATH = path.join(LOG_DIR, 'error-fallback.log');
+
+// DB 저장 실패 시 파일에 기록 (JSON Lines 형식)
+function logToFile(params: Record<string, unknown>, dbSaveError: string): void {
+  try {
+    if (!fs.existsSync(LOG_DIR)) {
+      fs.mkdirSync(LOG_DIR, { recursive: true });
+    }
+    const entry = {
+      timestamp: new Date().toISOString(),
+      ...params,
+      dbSaveError,
+    };
+    fs.appendFileSync(FALLBACK_LOG_PATH, JSON.stringify(entry) + '\n', 'utf-8');
+  } catch (fileError) {
+    // 파일 쓰기도 실패하면 콘솔이 마지막 보루
+    console.error('파일 폴백 로깅도 실패:', fileError);
+  }
+}
+
+// 파일 폴백 로그 읽기 (최근 N줄)
+export function readFallbackLogs(limit = 100): Record<string, unknown>[] {
+  try {
+    if (!fs.existsSync(FALLBACK_LOG_PATH)) return [];
+    const content = fs.readFileSync(FALLBACK_LOG_PATH, 'utf-8').trim();
+    if (!content) return [];
+    const lines = content.split('\n');
+    const recent = lines.slice(-limit);
+    return recent
+      .map(line => {
+        try { return JSON.parse(line); }
+        catch { return null; }
+      })
+      .filter(Boolean)
+      .reverse() as Record<string, unknown>[];
+  } catch {
+    return [];
+  }
+}
 
 // 민감 필드를 마스킹한 requestBody 반환
 function sanitizeRequestBody(body: Record<string, unknown> | undefined): string | null {
@@ -39,8 +83,17 @@ export async function logError(params: {
       },
     });
   } catch (dbError) {
-    // DB 저장 실패 시 콘솔에만 출력 (무한 루프 방지)
+    // DB 저장 실패 시 콘솔 출력 + 파일 폴백
     console.error('ErrorLog DB 저장 실패:', dbError);
+    const dbErrorMsg = dbError instanceof Error ? dbError.message : String(dbError);
+    logToFile({
+      endpoint: params.endpoint,
+      method: params.method,
+      statusCode: params.statusCode,
+      errorMessage: params.errorMessage,
+      userEmail: params.userEmail || null,
+      requestBody: sanitizeRequestBody(params.requestBody),
+    }, dbErrorMsg);
   }
 }
 

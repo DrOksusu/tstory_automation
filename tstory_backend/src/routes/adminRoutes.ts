@@ -1,6 +1,7 @@
 import { Router, Request, Response, NextFunction } from 'express';
 import prisma from '../services/prismaClient';
 import { config } from '../config';
+import { readFallbackLogs } from '../services/errorLogService';
 
 const router = Router();
 
@@ -87,6 +88,16 @@ router.get('/errors/stats', adminGuard, async (req: Request, res: Response) => {
     console.error('Get error stats failed:', error);
     res.status(500).json({ success: false, error: '에러 통계 조회 실패' });
   }
+});
+
+/**
+ * 파일 폴백 에러 로그 (DB 저장 실패 시 기록된 로그)
+ * GET /api/admin/errors/fallback?email=...&limit=100
+ */
+router.get('/errors/fallback', adminGuard, (req: Request, res: Response) => {
+  const limit = Math.min(500, Math.max(1, parseInt(req.query.limit as string) || 100));
+  const logs = readFallbackLogs(limit);
+  res.json({ success: true, logs, count: logs.length });
 });
 
 export default router;
