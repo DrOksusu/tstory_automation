@@ -95,3 +95,13 @@ jobs:
 
             # 미사용 이미지 정리
             docker image prune -f
+
+            # Caddy 리버스 프록시 설정 보장 (conf.d 모듈 방식)
+            sudo mkdir -p /etc/caddy/conf.d
+            if [ ! -f /etc/caddy/conf.d/tstory.caddy ]; then
+              echo 'tstory-api.3-37-159-141.sslip.io, tstory-backend.3-37-159-141.sslip.io {
+              	reverse_proxy localhost:3010
+              }' | sudo tee /etc/caddy/conf.d/tstory.caddy > /dev/null
+              sudo systemctl reload caddy
+              echo "Caddy tstory 설정 생성 및 reload 완료"
+            fi
