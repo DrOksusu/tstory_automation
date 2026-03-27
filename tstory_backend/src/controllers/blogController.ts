@@ -44,7 +44,7 @@ export async function startGenerate(
   req: Request<object, object, GenerateBlogRequest>,
   res: Response
 ): Promise<void> {
-  const { sourceUrl, mainKeyword, regionKeyword, customTopic, userEmail, ownerEmail, aiModel } = req.body;
+  const { sourceUrl, mainKeyword, regionKeyword, customTopic, systemPrompt, userEmail, ownerEmail, aiModel } = req.body;
 
   if (!sourceUrl || !mainKeyword || !regionKeyword) {
     res.status(400).json({
@@ -68,7 +68,7 @@ export async function startGenerate(
   generateTasks.set(taskId, task);
 
   // 백그라운드에서 작업 실행
-  runGenerateTask(taskId, sourceUrl, mainKeyword, regionKeyword, userEmail, aiModel, ownerEmail, customTopic).catch((error) => {
+  runGenerateTask(taskId, sourceUrl, mainKeyword, regionKeyword, userEmail, aiModel, ownerEmail, customTopic, systemPrompt).catch((error) => {
     console.error(`Generate task error for ${taskId}:`, error);
     const task = generateTasks.get(taskId);
     if (task) {
@@ -133,7 +133,8 @@ async function runGenerateTask(
   userEmail?: string,
   aiModel?: 'gemini' | 'claude',
   ownerEmail?: string,
-  customTopic?: string
+  customTopic?: string,
+  systemPrompt?: string
 ): Promise<void> {
   const task = generateTasks.get(taskId);
   if (!task) return;
@@ -155,7 +156,8 @@ async function runGenerateTask(
       mainKeyword,
       regionKeyword,
       modelName,
-      customTopic
+      customTopic,
+      systemPrompt
     );
 
     // 3. HTML 후처리
@@ -446,7 +448,7 @@ export async function generateAndPublish(
   req: Request<object, object, GenerateBlogRequest>,
   res: Response
 ): Promise<void> {
-  const { sourceUrl, mainKeyword, regionKeyword, customTopic, userEmail, ownerEmail, aiModel } = req.body;
+  const { sourceUrl, mainKeyword, regionKeyword, customTopic, systemPrompt, userEmail, ownerEmail, aiModel } = req.body;
 
   // 입력값 검증
   if (!sourceUrl || !mainKeyword || !regionKeyword) {
@@ -466,7 +468,8 @@ export async function generateAndPublish(
       mainKeyword,
       regionKeyword,
       modelName,
-      customTopic
+      customTopic,
+      systemPrompt
     );
 
     // 2. HTML 후처리
@@ -551,7 +554,7 @@ export async function generatePreview(
   req: Request<object, object, GenerateBlogRequest>,
   res: Response
 ): Promise<void> {
-  const { sourceUrl, mainKeyword, regionKeyword, customTopic, aiModel } = req.body;
+  const { sourceUrl, mainKeyword, regionKeyword, customTopic, systemPrompt, aiModel } = req.body;
 
   if (!sourceUrl || !mainKeyword || !regionKeyword) {
     res.status(400).json({
@@ -569,7 +572,8 @@ export async function generatePreview(
       mainKeyword,
       regionKeyword,
       modelName,
-      customTopic
+      customTopic,
+      systemPrompt
     );
 
     // HTML 후처리
@@ -601,7 +605,7 @@ export async function startPreview(
   req: Request<object, object, GenerateBlogRequest>,
   res: Response
 ): Promise<void> {
-  const { sourceUrl, mainKeyword, regionKeyword, customTopic, aiModel } = req.body;
+  const { sourceUrl, mainKeyword, regionKeyword, customTopic, systemPrompt, aiModel } = req.body;
 
   if (!sourceUrl || !mainKeyword || !regionKeyword) {
     res.status(400).json({
@@ -625,7 +629,7 @@ export async function startPreview(
   generateTasks.set(taskId, task);
 
   // 백그라운드에서 미리보기 작업 실행
-  runPreviewTask(taskId, sourceUrl, mainKeyword, regionKeyword, aiModel, customTopic).catch((error) => {
+  runPreviewTask(taskId, sourceUrl, mainKeyword, regionKeyword, aiModel, customTopic, systemPrompt).catch((error) => {
     console.error(`Preview task error for ${taskId}:`, error);
     const t = generateTasks.get(taskId);
     if (t) {
@@ -651,7 +655,8 @@ async function runPreviewTask(
   mainKeyword: string,
   regionKeyword: string,
   aiModel?: 'gemini' | 'claude',
-  customTopic?: string
+  customTopic?: string,
+  systemPrompt?: string
 ): Promise<void> {
   const task = generateTasks.get(taskId);
   if (!task) return;
@@ -674,7 +679,8 @@ async function runPreviewTask(
       mainKeyword,
       regionKeyword,
       modelName,
-      customTopic
+      customTopic,
+      systemPrompt
     );
 
     // step 3/4: HTML 후처리

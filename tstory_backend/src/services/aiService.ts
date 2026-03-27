@@ -8,13 +8,14 @@ export async function generateBlogContent(
   mainKeyword: string,
   regionKeyword: string,
   aiModel: 'gemini' | 'claude' = 'claude',
-  customTopic?: string
+  customTopic?: string,
+  systemPrompt?: string
 ): Promise<GeneratedContent> {
   console.log(`AI 모델 선택: ${aiModel}`);
 
   if (aiModel === 'claude') {
-    return generateBlogContentWithClaude(sourceUrl, mainKeyword, regionKeyword, customTopic);
+    return generateBlogContentWithClaude(sourceUrl, mainKeyword, regionKeyword, customTopic, systemPrompt);
   }
 
-  return generateWithGemini(sourceUrl, mainKeyword, regionKeyword, customTopic);
+  return generateWithGemini(sourceUrl, mainKeyword, regionKeyword, customTopic, systemPrompt);
 }

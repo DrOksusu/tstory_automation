@@ -9,12 +9,13 @@ export async function generateBlogContent(
   sourceUrl: string,
   mainKeyword: string,
   regionKeyword: string,
-  customTopic?: string
+  customTopic?: string,
+  systemPrompt?: string
 ): Promise<GeneratedContent> {
   // 참고 링크에서 콘텐츠 스크래핑
   const sourceContent = await scrapeWebContent(sourceUrl);
 
-  const prompt = buildPrompt(mainKeyword, regionKeyword, sourceContent, customTopic);
+  const prompt = buildPrompt(mainKeyword, regionKeyword, sourceContent, customTopic, systemPrompt);
 
   const model = genAI.getGenerativeModel({
     model: 'gemini-2.0-flash',
@@ -31,28 +32,21 @@ export async function generateBlogContent(
   return parseGeneratedContent(text);
 }
 
-export function buildPrompt(
-  mainKeyword: string,
-  regionKeyword: string,
-  sourceContent: string,
-  customTopic?: string
-): string {
-  const customTopicSection = customTopic
-    ? `\n## 핵심 주제\n${customTopic}\n`
-    : '';
+// 프론트엔드에 표시할 디폴트 프롬프트 (출력 형식 제외)
+export const DEFAULT_SYSTEM_PROMPT = `너는 상위 노출 1%를 만드는 검색엔진 최적화(SEO) 전문가이자 콘텐츠 에디터야. 아래 참고 내용을 바탕으로 검색엔진 최적화된 블로그 글을 HTML 형식으로 작성해줘.
 
-  return `너는 상위 노출 1%를 만드는 검색엔진 최적화(SEO) 전문가이자 콘텐츠 에디터야. 아래 참고 내용을 바탕으로 검색엔진 최적화된 블로그 글을 HTML 형식으로 작성해줘.
-${customTopicSection}
 ## 작성 규칙
 
-1. 메인 키워드는 '${mainKeyword}'야. 글 서론, 본론, 결론에 총 5회 자연스럽게 삽입해줘.
+1. 메인 키워드는 '{mainKeyword}'야. 글 서론, 본론, 결론에 총 5회 자연스럽게 삽입해줘.
 2. 글자수는 2000자 이상으로 작성해줘.
 3. '메타 디스크립션 - 서론 - 목차 - 본론 - 마무리' 구성으로 작성해줘.
 4. 본문에 가장 매칭률 높은 제목 1개를 선택해줘. (제목 후보는 5개 생성 후 최적의 1개 선택)
-5. 제목에는 '${regionKeyword}' 지역 키워드를 자연스럽게 삽입해줘.
+5. 제목에는 '{regionKeyword}' 지역 키워드를 자연스럽게 삽입해줘.
 6. 메인 키워드는 수정하지 말고, '치과', '환자', '병원' 같은 상업 키워드는 5회 이하로 사용해줘.
-7. 실제 40대 남자 치과의사가 작성한 것처럼 말투를 자연스럽게 작성해줘.
+7. 실제 40대 남자 치과의사가 작성한 것처럼 말투를 자연스럽게 작성해줘.`;
 
+// 출력 형식 (시스템 고정 — 사용자가 수정하면 JSON 파싱이 깨지므로)
+const OUTPUT_FORMAT = `
 ## 출력 형식
 
 반드시 아래 JSON 형식으로만 출력해줘 (코드 블록 없이 순수 JSON만):
@@ -61,7 +55,33 @@ ${customTopicSection}
   "title": "선택된 최적의 제목",
   "metaDescription": "SEO 최적화된 메타 디스크립션 (150자 내외)",
   "content": "<h2>서론</h2><p>서론 내용...</p><h2>목차</h2>...<h2>본론</h2>...<h2>마무리</h2>..."
-}
+}`;
+
+export function buildPrompt(
+  mainKeyword: string,
+  regionKeyword: string,
+  sourceContent: string,
+  customTopic?: string,
+  systemPrompt?: string
+): string {
+  const customTopicSection = customTopic
+    ? `\n## 핵심 주제\n${customTopic}\n`
+    : '';
+
+  // 사용자 커스텀 프롬프트가 있으면 플레이스홀더 치환, 없으면 디폴트 사용
+  let mainPrompt: string;
+  if (systemPrompt && systemPrompt.trim()) {
+    mainPrompt = systemPrompt
+      .replace(/\{mainKeyword\}/g, mainKeyword)
+      .replace(/\{regionKeyword\}/g, regionKeyword);
+  } else {
+    mainPrompt = DEFAULT_SYSTEM_PROMPT
+      .replace(/\{mainKeyword\}/g, mainKeyword)
+      .replace(/\{regionKeyword\}/g, regionKeyword);
+  }
+
+  return `${mainPrompt}
+${customTopicSection}${OUTPUT_FORMAT}
 
 ## 참고 내용
 

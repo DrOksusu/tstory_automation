@@ -1,12 +1,27 @@
 'use client';
 
+import { useState } from 'react';
 import type { RecentPost } from '../hooks/useBlogPublish';
+
+// 디폴트 시스템 프롬프트 (백엔드 geminiService.ts와 동일)
+const DEFAULT_SYSTEM_PROMPT = `너는 상위 노출 1%를 만드는 검색엔진 최적화(SEO) 전문가이자 콘텐츠 에디터야. 아래 참고 내용을 바탕으로 검색엔진 최적화된 블로그 글을 HTML 형식으로 작성해줘.
+
+## 작성 규칙
+
+1. 메인 키워드는 '{mainKeyword}'야. 글 서론, 본론, 결론에 총 5회 자연스럽게 삽입해줘.
+2. 글자수는 2000자 이상으로 작성해줘.
+3. '메타 디스크립션 - 서론 - 목차 - 본론 - 마무리' 구성으로 작성해줘.
+4. 본문에 가장 매칭률 높은 제목 1개를 선택해줘. (제목 후보는 5개 생성 후 최적의 1개 선택)
+5. 제목에는 '{regionKeyword}' 지역 키워드를 자연스럽게 삽입해줘.
+6. 메인 키워드는 수정하지 말고, '치과', '환자', '병원' 같은 상업 키워드는 5회 이하로 사용해줘.
+7. 실제 40대 남자 치과의사가 작성한 것처럼 말투를 자연스럽게 작성해줘.`;
 
 interface FormData {
   sourceUrl: string;
   mainKeyword: string;
   regionKeyword: string;
   customTopic: string;
+  systemPrompt: string;
   aiModel: 'claude' | 'gemini';
 }
 
@@ -29,6 +44,8 @@ export default function BlogForm({
   loadingType,
   recentPosts = [],
 }: BlogFormProps) {
+  const [showAdvanced, setShowAdvanced] = useState(false);
+
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
     const { name, value } = e.target;
     setFormData({ ...formData, [name]: value });
@@ -191,6 +208,52 @@ export default function BlogForm({
             <option value="claude">Claude (기본)</option>
             <option value="gemini">Gemini</option>
           </select>
+        </div>
+
+        {/* 고급 설정 (시스템 프롬프트) */}
+        <div className="border border-slate-200 rounded-xl overflow-hidden">
+          <button
+            type="button"
+            onClick={() => setShowAdvanced(!showAdvanced)}
+            className="w-full flex items-center justify-between px-4 py-3 bg-slate-50 hover:bg-slate-100 transition-colors text-sm font-medium text-slate-700"
+          >
+            <span>고급 설정 (시스템 프롬프트)</span>
+            <svg
+              className={`w-4 h-4 transition-transform ${showAdvanced ? 'rotate-180' : ''}`}
+              fill="none" stroke="currentColor" viewBox="0 0 24 24"
+            >
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+            </svg>
+          </button>
+          {showAdvanced && (
+            <div className="p-4 space-y-3">
+              <p className="text-xs text-slate-500">
+                AI에게 전달할 프롬프트를 수정할 수 있습니다. 비워두면 기본 프롬프트가 사용됩니다.
+                <br />
+                <code className="text-orange-600">{'{mainKeyword}'}</code>, <code className="text-orange-600">{'{regionKeyword}'}</code> 플레이스홀더는 실제 키워드로 자동 치환됩니다.
+              </p>
+              <textarea
+                name="systemPrompt"
+                value={formData.systemPrompt || DEFAULT_SYSTEM_PROMPT}
+                onChange={(e) => {
+                  const value = e.target.value === DEFAULT_SYSTEM_PROMPT ? '' : e.target.value;
+                  setFormData({ ...formData, systemPrompt: value });
+                }}
+                rows={10}
+                className="w-full px-4 py-3 border border-slate-300 rounded-xl focus:ring-2 focus:ring-orange-500 focus:border-orange-500 transition-all outline-none resize-y text-sm font-mono leading-relaxed"
+                disabled={loading}
+              />
+              {formData.systemPrompt && (
+                <button
+                  type="button"
+                  onClick={() => setFormData({ ...formData, systemPrompt: '' })}
+                  className="text-xs text-orange-500 hover:text-orange-700 font-medium"
+                >
+                  기본 프롬프트로 초기화
+                </button>
+              )}
+            </div>
+          )}
         </div>
 
         {/* 버튼 */}
