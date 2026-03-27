@@ -10,6 +10,9 @@ import { loadCookies, saveCookies } from './tistoryCookieManager';
 import { delay } from './tistoryUtils';
 import { connectToBrowserbase, getOrCreateContext } from './browserbaseConnector';
 import { getUserDataDir, closeExistingBrowser, registerBrowser, unregisterBrowser } from '../utils/browserProfile';
+import { getCredential } from './credentialService';
+import { testLogin } from './tistoryAuth';
+import { logError } from './errorLogService';
 
 let isRefreshing = false;
 
@@ -48,6 +51,14 @@ export async function refreshAllCookies(): Promise<void> {
       } catch (error) {
         const msg = error instanceof Error ? error.message : String(error);
         console.error(`[쿠키갱신] 실패: ${account.userEmail} - ${msg}`);
+        await logError({
+          endpoint: '/scheduler/cookie-refresh',
+          method: 'CRON',
+          statusCode: 500,
+          errorMessage: `쿠키 갱신 실패: ${account.userEmail} - ${msg}`,
+          errorStack: error instanceof Error ? error.stack : undefined,
+          userEmail: account.userEmail,
+        });
       }
 
       // 계정 간 간격 (브라우저 리소스 보호)
@@ -128,7 +139,24 @@ async function refreshSingleAccount(userEmail: string, ownerEmail: string): Prom
     // 로그인 페이지로 리다이렉트됐으면 쿠키가 이미 만료된 것
     const isLoginPage = currentUrl.includes('login') || currentUrl.includes('auth') || currentUrl.includes('kakao');
     if (isLoginPage) {
-      console.warn(`[쿠키갱신] ${userEmail}: 세션 이미 만료됨 (재로그인 필요)`);
+      console.warn(`[쿠키갱신] ${userEmail}: 세션 만료됨, 자동 재로그인 시도`);
+
+      // 저장된 자격증명 조회
+      const credential = await getCredential(userEmail, ownerEmail);
+      if (!credential) {
+        throw new Error('세션 만료 + 저장된 자격증명 없음 (수동 재로그인 필요)');
+      }
+
+      // 기존 브라우저 닫고 testLogin으로 자동 재로그인
+      await browser.close();
+      browser = null;
+
+      const result = await testLogin(credential, ownerEmail);
+      if (!result.success) {
+        throw new Error(`자동 재로그인 실패: ${result.message}`);
+      }
+
+      console.log(`[쿠키갱신] ${userEmail}: 자동 재로그인 성공`);
       return;
     }
 
