@@ -156,7 +156,36 @@ async function refreshSingleAccount(userEmail: string, ownerEmail: string): Prom
         throw new Error(`자동 재로그인 실패: ${result.message}`);
       }
 
-      console.log(`[쿠키갱신] ${userEmail}: 자동 재로그인 성공`);
+      // 재로그인 후 실제 세션 유효성 검증
+      let verifyBrowser: Browser | null = null;
+      try {
+        if (useBrowserbase) {
+          const contextId = await getOrCreateContext(userEmail, ownerEmail);
+          const { browser: bb } = await connectToBrowserbase(contextId);
+          verifyBrowser = bb;
+        } else {
+          verifyBrowser = await puppeteer.launch({
+            headless: true,
+            args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage'],
+          });
+        }
+
+        const verifyPage = await verifyBrowser.newPage();
+        await loadCookies(verifyPage, userEmail, ownerEmail);
+        const verifyUrl = `https://${config.tistory.blogName}.tistory.com/manage/newpost`;
+        await verifyPage.goto(verifyUrl, { waitUntil: 'networkidle2', timeout: 15000 });
+
+        const actualUrl = verifyPage.url();
+        if (actualUrl.includes('login') || actualUrl.includes('auth') || actualUrl.includes('kakao')) {
+          throw new Error('재로그인 후에도 세션 무효 (2FA 미완료 가능성)');
+        }
+
+        console.log(`[쿠키갱신] ${userEmail}: 자동 재로그인 성공 (검증 완료)`);
+      } finally {
+        if (verifyBrowser) {
+          await verifyBrowser.close().catch(() => {});
+        }
+      }
       return;
     }
 

@@ -315,9 +315,14 @@ export async function loginToTistory(page: Page, credentials?: { email: string; 
 
           // 티스토리로 리다이렉트 완료 (OAuth 콜백 /auth/login?code= 제외)
           if (checkUrl.includes('tistory.com') && !checkUrl.includes('/auth/login')) {
-            console.log('2FA completed successfully!');
-            await saveCookies(page, email, ownerEmail);
-            return true;
+            // URL만으로 부족 — 실제 로그인 상태 재검증
+            const verified = await isLoggedIn(page);
+            if (verified) {
+              console.log('2FA completed successfully! (verified)');
+              await saveCookies(page, email, ownerEmail);
+              return true;
+            }
+            console.warn('2FA: tistory.com 리다이렉트 감지됐으나 세션 무효 — 대기 계속');
           }
 
           // 2FA 완료 후 카카오 OAuth 동의("계속하기") 페이지가 다시 나타날 수 있음
@@ -338,9 +343,13 @@ export async function loginToTistory(page: Page, credentials?: { email: string; 
                   const afterClickUrl = page.url();
                   console.log(`계속하기 클릭 후 URL: ${afterClickUrl}`);
                   if (afterClickUrl.includes('tistory.com') && !afterClickUrl.includes('/auth/login')) {
-                    console.log('2FA + 계속하기 후 로그인 성공!');
-                    await saveCookies(page, email, ownerEmail);
-                    return true;
+                    const verified = await isLoggedIn(page);
+                    if (verified) {
+                      console.log('2FA + 계속하기 후 로그인 성공! (verified)');
+                      await saveCookies(page, email, ownerEmail);
+                      return true;
+                    }
+                    console.warn('2FA + 계속하기: tistory.com 도달했으나 세션 무효');
                   }
                 }
               }
@@ -359,9 +368,13 @@ export async function loginToTistory(page: Page, credentials?: { email: string; 
     const finalUrl = page.url();
     console.log(`Final URL: ${finalUrl}`);
 
-    if (finalUrl.includes('tistory.com') && !finalUrl.includes('login')) {
-      await saveCookies(page, email, ownerEmail);
-      return true;
+    if (finalUrl.includes('tistory.com') && !finalUrl.includes('/auth/login')) {
+      const verified = await isLoggedIn(page);
+      if (verified) {
+        await saveCookies(page, email, ownerEmail);
+        return true;
+      }
+      console.warn(`Final URL은 tistory.com이지만 세션 무효: ${finalUrl}`);
     }
 
     await page.screenshot({ path: 'tistory-login-final-error.png', fullPage: true });
