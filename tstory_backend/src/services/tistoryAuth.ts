@@ -22,10 +22,11 @@ function generateSessionId(): string {
 /**
  * 로그인 상태 확인 (더 정확한 체크)
  */
-export async function isLoggedIn(page: Page): Promise<boolean> {
+export async function isLoggedIn(page: Page, blogName?: string): Promise<boolean> {
   try {
+    const targetBlog = blogName || config.tistory.blogName;
     // 글쓰기 페이지로 직접 이동 시도 (더 정확한 체크)
-    const writeUrl = `https://${config.tistory.blogName}.tistory.com/manage/newpost`;
+    const writeUrl = `https://${targetBlog}.tistory.com/manage/newpost`;
     console.log(`isLoggedIn check - navigating to: ${writeUrl}`);
 
     await page.goto(writeUrl, {
@@ -53,8 +54,8 @@ export async function isLoggedIn(page: Page): Promise<boolean> {
     }
 
     // 블로그 홈으로 리다이렉트되면 쿠키는 있지만 세션이 만료됨
-    if (url === `https://${config.tistory.blogName}.tistory.com/` ||
-        url === `https://${config.tistory.blogName}.tistory.com`) {
+    if (url === `https://${targetBlog}.tistory.com/` ||
+        url === `https://${targetBlog}.tistory.com`) {
       console.log('Cookie exists but session expired - redirected to blog home');
       return false;
     }

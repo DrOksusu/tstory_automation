@@ -20,9 +20,11 @@ export async function publishToTistory(params: {
   tag?: string;
   userEmail?: string;
   ownerEmail?: string;
+  blogName?: string;
   onProgress?: (message: string) => void;
 }): Promise<TistoryPublishResult> {
-  const { title, content, tag, userEmail, ownerEmail, onProgress } = params;
+  const { title, content, tag, userEmail, ownerEmail, blogName, onProgress } = params;
+  const targetBlog = blogName || config.tistory.blogName;
 
   // 진행 상태 리포터
   const report = (msg: string) => {
@@ -99,7 +101,7 @@ export async function publishToTistory(params: {
     console.log(`Cookies loaded: ${cookiesLoaded} (user: ${userEmail || 'none'}, owner: ${ownerEmail || 'none'})`);
 
     // 로그인 상태 확인
-    const loggedIn = await isLoggedIn(page);
+    const loggedIn = await isLoggedIn(page, targetBlog);
 
     if (!loggedIn) {
       console.log('Not logged in or session expired');
@@ -165,7 +167,7 @@ export async function publishToTistory(params: {
     });
 
     // 글쓰기 페이지로 이동 시도
-    const writeUrl = `https://${config.tistory.blogName}.tistory.com/manage/newpost`;
+    const writeUrl = `https://${targetBlog}.tistory.com/manage/newpost`;
     console.log('Navigating to:', writeUrl);
     await page.goto(writeUrl, {
       waitUntil: 'domcontentloaded',
@@ -186,8 +188,8 @@ export async function publishToTistory(params: {
 
       // 로그인 페이지로 리다이렉트되었거나 블로그 홈으로 갔으면 세션 만료
       const isLoginPage = currentUrl.includes('login') || currentUrl.includes('auth') || currentUrl.includes('kakao');
-      const isBlogHome = currentUrl === `https://${config.tistory.blogName}.tistory.com/` ||
-                         currentUrl === `https://${config.tistory.blogName}.tistory.com`;
+      const isBlogHome = currentUrl === `https://${targetBlog}.tistory.com/` ||
+                         currentUrl === `https://${targetBlog}.tistory.com`;
 
       if (isLoginPage || isBlogHome) {
         // Browserbase 환경에서는 에러 반환

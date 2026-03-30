@@ -11,6 +11,7 @@ export interface RecentPost {
   sourceUrl: string;
   mainKeyword: string;
   regionKeyword: string;
+  blogName?: string;
   createdAt: string;
 }
 
@@ -23,6 +24,7 @@ export function useBlogPublish(selectedAccount: string | null) {
   const [publishResult, setPublishResult] = useState<PublishResult | null>(null);
   const [publishProgress, setPublishProgress] = useState<PublishProgress | null>(null);
   const [recentPosts, setRecentPosts] = useState<RecentPost[]>([]);
+  const [blogNames, setBlogNames] = useState<string[]>([]);
   const [formData, setFormData] = useState({
     sourceUrl: '',
     mainKeyword: '',
@@ -30,20 +32,22 @@ export function useBlogPublish(selectedAccount: string | null) {
     customTopic: '',
     systemPrompt: '',
     aiModel: 'claude' as 'claude' | 'gemini',
+    blogName: '',
   });
 
-  // 마운트 시 최근 글 목록 로드 + 기본값 설정
+  // 마운트 시 최근 글 목록 + 블로그 이름 목록 로드
   useEffect(() => {
     const fetchRecentPosts = async () => {
       try {
         const response = await fetch('/api/blog/posts');
         const data = await response.json();
         if (data.success && Array.isArray(data.posts)) {
-          const recent: RecentPost[] = data.posts.slice(0, 10).map((p: RecentPost) => ({
+          const recent: RecentPost[] = data.posts.slice(0, 10).map((p: RecentPost & { blogName?: string }) => ({
             id: p.id,
             sourceUrl: p.sourceUrl,
             mainKeyword: p.mainKeyword,
             regionKeyword: p.regionKeyword,
+            blogName: p.blogName,
             createdAt: p.createdAt,
           }));
           setRecentPosts(recent);
@@ -54,6 +58,7 @@ export function useBlogPublish(selectedAccount: string | null) {
               ...prev,
               mainKeyword: latest.mainKeyword,
               regionKeyword: latest.regionKeyword,
+              blogName: latest.blogName || prev.blogName,
             }));
           }
         }
@@ -61,7 +66,28 @@ export function useBlogPublish(selectedAccount: string | null) {
         console.error('최근 글 목록 로드 실패:', error);
       }
     };
+
+    const fetchBlogNames = async () => {
+      try {
+        const response = await fetch('/api/blog/blog-names');
+        const data = await response.json();
+        if (data.success && Array.isArray(data.blogNames)) {
+          setBlogNames(data.blogNames);
+          // 블로그 이름이 아직 없으면 최근 사용한 것으로 설정
+          if (data.blogNames.length > 0) {
+            setFormData((prev) => ({
+              ...prev,
+              blogName: prev.blogName || data.blogNames[0],
+            }));
+          }
+        }
+      } catch (error) {
+        console.error('블로그 이름 목록 로드 실패:', error);
+      }
+    };
+
     fetchRecentPosts();
+    fetchBlogNames();
   }, []);
 
   // 미리보기 요청 (폴링 방식)
@@ -310,6 +336,7 @@ export function useBlogPublish(selectedAccount: string | null) {
           metaDescription: editedData.metaDescription,
           userEmail: selectedAccount,
           ownerEmail,
+          blogName: formData.blogName || undefined,
         }),
       });
 
@@ -401,6 +428,7 @@ export function useBlogPublish(selectedAccount: string | null) {
     formData,
     setFormData,
     recentPosts,
+    blogNames,
     handlePreview,
     handlePublish,
     handlePublishFromPreview,

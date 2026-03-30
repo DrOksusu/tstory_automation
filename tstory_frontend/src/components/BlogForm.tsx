@@ -23,6 +23,7 @@ interface FormData {
   customTopic: string;
   systemPrompt: string;
   aiModel: 'claude' | 'gemini';
+  blogName: string;
 }
 
 interface BlogFormProps {
@@ -33,6 +34,7 @@ interface BlogFormProps {
   loading: boolean;
   loadingType: 'preview' | 'publish' | null;
   recentPosts?: RecentPost[];
+  blogNames?: string[];
 }
 
 export default function BlogForm({
@@ -43,6 +45,7 @@ export default function BlogForm({
   loading,
   loadingType,
   recentPosts = [],
+  blogNames = [],
 }: BlogFormProps) {
   const [showAdvanced, setShowAdvanced] = useState(false);
 
@@ -103,6 +106,36 @@ export default function BlogForm({
             </p>
           </div>
         )}
+
+        {/* 발행 블로그 */}
+        <div>
+          <label className="block text-sm font-medium text-slate-700 mb-2">
+            발행 블로그
+          </label>
+          <div className="flex items-center gap-2">
+            <div className="flex-1 relative">
+              <input
+                type="text"
+                name="blogName"
+                list="blogNameList"
+                value={formData.blogName}
+                onChange={handleChange}
+                placeholder="블로그 이름 입력 (예: my-blog)"
+                className="w-full px-4 py-3 border border-slate-300 rounded-xl focus:ring-2 focus:ring-orange-500 focus:border-orange-500 transition-all outline-none"
+                disabled={loading}
+              />
+              <datalist id="blogNameList">
+                {blogNames.map((name) => (
+                  <option key={name} value={name} />
+                ))}
+              </datalist>
+            </div>
+            <span className="text-sm text-slate-500 whitespace-nowrap">.tistory.com</span>
+          </div>
+          <p className="mt-1.5 text-xs text-slate-500">
+            글을 발행할 티스토리 블로그 이름을 입력하세요 (최근 사용한 블로그가 자동 선택됩니다)
+          </p>
+        </div>
 
         {/* 참고 URL */}
         <div>

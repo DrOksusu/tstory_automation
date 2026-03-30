@@ -44,7 +44,7 @@ export async function startGenerate(
   req: Request<object, object, GenerateBlogRequest>,
   res: Response
 ): Promise<void> {
-  const { sourceUrl, mainKeyword, regionKeyword, customTopic, systemPrompt, userEmail, ownerEmail, aiModel } = req.body;
+  const { sourceUrl, mainKeyword, regionKeyword, customTopic, systemPrompt, userEmail, ownerEmail, aiModel, blogName } = req.body;
 
   if (!sourceUrl || !mainKeyword || !regionKeyword) {
     res.status(400).json({
@@ -68,7 +68,7 @@ export async function startGenerate(
   generateTasks.set(taskId, task);
 
   // 백그라운드에서 작업 실행
-  runGenerateTask(taskId, sourceUrl, mainKeyword, regionKeyword, userEmail, aiModel, ownerEmail, customTopic, systemPrompt).catch((error) => {
+  runGenerateTask(taskId, sourceUrl, mainKeyword, regionKeyword, userEmail, aiModel, ownerEmail, customTopic, systemPrompt, blogName).catch((error) => {
     console.error(`Generate task error for ${taskId}:`, error);
     const task = generateTasks.get(taskId);
     if (task) {
@@ -134,7 +134,8 @@ async function runGenerateTask(
   aiModel?: 'gemini' | 'claude',
   ownerEmail?: string,
   customTopic?: string,
-  systemPrompt?: string
+  systemPrompt?: string,
+  blogName?: string
 ): Promise<void> {
   const task = generateTasks.get(taskId);
   if (!task) return;
@@ -177,6 +178,7 @@ async function runGenerateTask(
         regionKeyword,
         title: generatedContent.title,
         content: cleanedContent,
+        blogName: blogName || null,
         status: 'created',
       },
     });
@@ -184,7 +186,7 @@ async function runGenerateTask(
     // 5~12. 티스토리에 발행 (onProgress 8회 호출)
     task.status = 'publishing';
     task.message = '티스토리에 발행 중... (브라우저 작업 진행 중)';
-    console.log(`[${taskId}] Publishing to Tistory... (user: ${userEmail || 'none'}, owner: ${ownerEmail || 'none'})`);
+    console.log(`[${taskId}] Publishing to Tistory... (user: ${userEmail || 'none'}, owner: ${ownerEmail || 'none'}, blog: ${blogName || 'default'})`);
 
     let publishStep = 4;
     const tistoryResult = await publishToTistory({
@@ -193,6 +195,7 @@ async function runGenerateTask(
       tag: `${mainKeyword},${regionKeyword}`,
       userEmail,
       ownerEmail,
+      blogName,
       onProgress: (msg) => { publishStep++; task.step = publishStep; task.message = msg; },
     });
 
@@ -272,6 +275,7 @@ interface PublishContentRequest {
   metaDescription?: string;
   userEmail?: string;
   ownerEmail?: string;
+  blogName?: string;
 }
 
 /**
@@ -282,7 +286,7 @@ export async function startPublishContent(
   req: Request<object, object, PublishContentRequest>,
   res: Response
 ): Promise<void> {
-  const { title, content, metaDescription, userEmail, ownerEmail } = req.body;
+  const { title, content, metaDescription, userEmail, ownerEmail, blogName } = req.body;
 
   if (!title || !content) {
     res.status(400).json({
@@ -306,7 +310,7 @@ export async function startPublishContent(
   generateTasks.set(taskId, task);
 
   // 백그라운드에서 발행 작업 실행
-  runPublishContentTask(taskId, title, content, userEmail, ownerEmail).catch((error) => {
+  runPublishContentTask(taskId, title, content, userEmail, ownerEmail, blogName).catch((error) => {
     console.error(`Publish content task error for ${taskId}:`, error);
     const task = generateTasks.get(taskId);
     if (task) {
@@ -331,7 +335,8 @@ async function runPublishContentTask(
   title: string,
   content: string,
   userEmail?: string,
-  ownerEmail?: string
+  ownerEmail?: string,
+  blogName?: string
 ): Promise<void> {
   const task = generateTasks.get(taskId);
   if (!task) return;
@@ -354,13 +359,14 @@ async function runPublishContentTask(
         regionKeyword: '',
         title: title,
         content: content,
+        blogName: blogName || null,
         status: 'created',
       },
     });
 
     // 3~10. 티스토리에 발행 (onProgress 8회 호출)
     task.message = '티스토리에 발행 중... (브라우저 작업 진행 중)';
-    console.log(`[${taskId}] Publishing edited content to Tistory... (user: ${userEmail || 'none'}, owner: ${ownerEmail || 'none'})`);
+    console.log(`[${taskId}] Publishing edited content to Tistory... (user: ${userEmail || 'none'}, owner: ${ownerEmail || 'none'}, blog: ${blogName || 'default'})`);
 
     let publishStep = 2;
     const tistoryResult = await publishToTistory({
@@ -369,6 +375,7 @@ async function runPublishContentTask(
       tag: '',
       userEmail,
       ownerEmail,
+      blogName,
       onProgress: (msg) => { publishStep++; task.step = publishStep; task.message = msg; },
     });
 
@@ -448,7 +455,7 @@ export async function generateAndPublish(
   req: Request<object, object, GenerateBlogRequest>,
   res: Response
 ): Promise<void> {
-  const { sourceUrl, mainKeyword, regionKeyword, customTopic, systemPrompt, userEmail, ownerEmail, aiModel } = req.body;
+  const { sourceUrl, mainKeyword, regionKeyword, customTopic, systemPrompt, userEmail, ownerEmail, aiModel, blogName } = req.body;
 
   // 입력값 검증
   if (!sourceUrl || !mainKeyword || !regionKeyword) {
@@ -486,18 +493,20 @@ export async function generateAndPublish(
         regionKeyword,
         title: generatedContent.title,
         content: cleanedContent,
+        blogName: blogName || null,
         status: 'created',
       },
     });
 
     // 4. 티스토리에 발행 (Puppeteer)
-    console.log(`Publishing to Tistory... (user: ${userEmail || 'none'}, owner: ${ownerEmail || 'none'})`);
+    console.log(`Publishing to Tistory... (user: ${userEmail || 'none'}, owner: ${ownerEmail || 'none'}, blog: ${blogName || 'default'})`);
     const tistoryResult = await publishToTistory({
       title: generatedContent.title,
       content: cleanedContent,
       tag: `${mainKeyword},${regionKeyword}`,
       userEmail,
       ownerEmail,
+      blogName,
     });
 
     if (!tistoryResult.success) {
@@ -605,7 +614,7 @@ export async function startPreview(
   req: Request<object, object, GenerateBlogRequest>,
   res: Response
 ): Promise<void> {
-  const { sourceUrl, mainKeyword, regionKeyword, customTopic, systemPrompt, aiModel } = req.body;
+  const { sourceUrl, mainKeyword, regionKeyword, customTopic, systemPrompt, aiModel, blogName } = req.body;
 
   if (!sourceUrl || !mainKeyword || !regionKeyword) {
     res.status(400).json({
@@ -629,7 +638,7 @@ export async function startPreview(
   generateTasks.set(taskId, task);
 
   // 백그라운드에서 미리보기 작업 실행
-  runPreviewTask(taskId, sourceUrl, mainKeyword, regionKeyword, aiModel, customTopic, systemPrompt).catch((error) => {
+  runPreviewTask(taskId, sourceUrl, mainKeyword, regionKeyword, aiModel, customTopic, systemPrompt, blogName).catch((error) => {
     console.error(`Preview task error for ${taskId}:`, error);
     const t = generateTasks.get(taskId);
     if (t) {
@@ -656,7 +665,8 @@ async function runPreviewTask(
   regionKeyword: string,
   aiModel?: 'gemini' | 'claude',
   customTopic?: string,
-  systemPrompt?: string
+  systemPrompt?: string,
+  blogName?: string
 ): Promise<void> {
   const task = generateTasks.get(taskId);
   if (!task) return;
@@ -713,6 +723,7 @@ async function runPreviewTask(
           regionKeyword,
           title: generatedContent.title,
           content: cleanedContent,
+          blogName: blogName || null,
           status: 'created',
           previewDurationMs: durationMs,
         },
@@ -766,6 +777,47 @@ export async function getPosts(req: Request, res: Response): Promise<void> {
     res.status(500).json({
       success: false,
       error: 'Failed to get posts',
+    });
+  }
+}
+
+/**
+ * 사용된 블로그 이름 목록 조회 (최근 사용 순)
+ * GET /api/blog/blog-names
+ */
+export async function getBlogNames(req: Request, res: Response): Promise<void> {
+  try {
+    const posts = await prisma.blogPost.findMany({
+      where: {
+        blogName: { not: null },
+      },
+      select: {
+        blogName: true,
+        createdAt: true,
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+
+    // 중복 제거, 최근 사용 순 유지
+    const seen = new Set<string>();
+    const blogNames: string[] = [];
+    for (const post of posts) {
+      if (post.blogName && !seen.has(post.blogName)) {
+        seen.add(post.blogName);
+        blogNames.push(post.blogName);
+      }
+    }
+
+    res.json({
+      success: true,
+      blogNames,
+    });
+  } catch (error) {
+    console.error('Error getting blog names:', error);
+    await logApiError(req, 500, error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to get blog names',
     });
   }
 }

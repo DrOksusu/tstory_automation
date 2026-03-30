@@ -8,6 +8,7 @@ import {
   startPublishContent,
   startPreview,
   getAvgDuration,
+  getBlogNames,
 } from '../controllers/blogController';
 import {
   createSchedule,
@@ -38,6 +39,9 @@ router.post('/publish-content', startPublishContent);
 
 // 생성된 글 목록 조회
 router.get('/posts', getPosts);
+
+// 사용된 블로그 이름 목록 조회 (최근 사용 순)
+router.get('/blog-names', getBlogNames);
 
 // 발행 평균 소요시간 조회
 router.get('/avg-duration', getAvgDuration);

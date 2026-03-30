@@ -69,6 +69,7 @@ export default function Home() {
     formData,
     setFormData,
     recentPosts,
+    blogNames,
     handlePreview,
     handlePublish,
     handlePublishFromPreview,
@@ -237,6 +238,7 @@ export default function Home() {
         loading={loading}
         loadingType={loadingType}
         recentPosts={recentPosts}
+        blogNames={blogNames}
       />
 
       {/* 사용 가이드 */}
