@@ -48,6 +48,10 @@ export default function BlogForm({
   blogNames = [],
 }: BlogFormProps) {
   const [showAdvanced, setShowAdvanced] = useState(false);
+  const [isCustomBlog, setIsCustomBlog] = useState(false);
+
+  // 최근 5개 블로그 (중복 제거)
+  const recentBlogNames = blogNames.slice(0, 5);
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
     const { name, value } = e.target;
@@ -113,27 +117,64 @@ export default function BlogForm({
             발행 블로그
           </label>
           <div className="flex items-center gap-2">
-            <div className="flex-1 relative">
-              <input
-                type="text"
-                name="blogName"
-                list="blogNameList"
+            {recentBlogNames.length > 0 && !isCustomBlog ? (
+              <select
                 value={formData.blogName}
-                onChange={handleChange}
-                placeholder="블로그 이름 입력 (예: my-blog)"
-                className="w-full px-4 py-3 border border-slate-300 rounded-xl focus:ring-2 focus:ring-orange-500 focus:border-orange-500 transition-all outline-none"
+                onChange={(e) => {
+                  if (e.target.value === '__custom__') {
+                    setIsCustomBlog(true);
+                    setFormData({ ...formData, blogName: '' });
+                  } else {
+                    setFormData({ ...formData, blogName: e.target.value });
+                  }
+                }}
                 disabled={loading}
-              />
-              <datalist id="blogNameList">
-                {blogNames.map((name) => (
-                  <option key={name} value={name} />
+                className="flex-1 px-4 py-3 border border-slate-300 rounded-xl focus:ring-2 focus:ring-orange-500 focus:border-orange-500 transition-all outline-none bg-white text-sm"
+              >
+                {!formData.blogName && (
+                  <option value="">블로그를 선택하세요</option>
+                )}
+                {recentBlogNames.map((name) => (
+                  <option key={name} value={name}>
+                    {name}.tistory.com
+                  </option>
                 ))}
-              </datalist>
-            </div>
-            <span className="text-sm text-slate-500 whitespace-nowrap">.tistory.com</span>
+                <option value="__custom__">+ 새 블로그 직접 입력</option>
+              </select>
+            ) : (
+              <div className="flex-1 flex items-center gap-2">
+                <input
+                  type="text"
+                  name="blogName"
+                  value={formData.blogName}
+                  onChange={handleChange}
+                  placeholder="블로그 이름 입력 (예: my-blog)"
+                  className="flex-1 px-4 py-3 border border-slate-300 rounded-xl focus:ring-2 focus:ring-orange-500 focus:border-orange-500 transition-all outline-none"
+                  disabled={loading}
+                  autoFocus={isCustomBlog}
+                />
+                {isCustomBlog && recentBlogNames.length > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsCustomBlog(false);
+                      setFormData({ ...formData, blogName: recentBlogNames[0] });
+                    }}
+                    className="text-xs text-slate-500 hover:text-orange-500 whitespace-nowrap"
+                  >
+                    목록으로
+                  </button>
+                )}
+              </div>
+            )}
+            {(isCustomBlog || recentBlogNames.length === 0) && (
+              <span className="text-sm text-slate-500 whitespace-nowrap">.tistory.com</span>
+            )}
           </div>
           <p className="mt-1.5 text-xs text-slate-500">
-            글을 발행할 티스토리 블로그 이름을 입력하세요 (최근 사용한 블로그가 자동 선택됩니다)
+            {recentBlogNames.length > 0
+              ? '최근 사용한 블로그가 자동 선택됩니다. 새 블로그는 직접 입력할 수 있습니다.'
+              : '글을 발행할 티스토리 블로그 이름을 입력하세요'}
           </p>
         </div>
 
