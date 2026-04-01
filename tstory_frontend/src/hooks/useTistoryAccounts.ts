@@ -1,6 +1,7 @@
 // 티스토리 계정 관리 훅
 
 import { useState, useRef, useCallback } from 'react';
+import { API_BASE } from '@/utils/apiBase';
 import { safeJsonParse } from '../utils/api';
 import { useAuth } from '../contexts/AuthContext';
 import type { TistoryAccount, AddAccountStatus, SavedCredential } from '../types/blog';
@@ -38,7 +39,7 @@ export function useTistoryAccounts() {
     try {
       setLoadingAccounts(true);
       const params = ownerEmail ? `?ownerEmail=${encodeURIComponent(ownerEmail)}` : '';
-      const response = await fetch(`/auth/accounts${params}`);
+      const response = await fetch(`${API_BASE}/auth/accounts${params}`);
       const result = await safeJsonParse(response);
       if (!result.ok || !result.data) {
         console.error('Failed to fetch accounts:', result.error);
@@ -66,7 +67,7 @@ export function useTistoryAccounts() {
   const fetchCredentials = useCallback(async () => {
     try {
       const params = ownerEmail ? `?ownerEmail=${encodeURIComponent(ownerEmail)}` : '';
-      const response = await fetch(`/auth/credentials${params}`);
+      const response = await fetch(`${API_BASE}/auth/credentials${params}`);
       const result = await safeJsonParse(response);
       if (!result.ok || !result.data) return;
       const data = result.data as { success: boolean; credentials: SavedCredential[] };
@@ -84,7 +85,7 @@ export function useTistoryAccounts() {
     setNewAccountEmail(email);
     try {
       const params = ownerEmail ? `?ownerEmail=${encodeURIComponent(ownerEmail)}` : '';
-      const response = await fetch(`/auth/credentials/${encodeURIComponent(email)}${params}`);
+      const response = await fetch(`${API_BASE}/auth/credentials/${encodeURIComponent(email)}${params}`);
       const result = await safeJsonParse(response);
       if (!result.ok || !result.data) {
         const errorMsg = result.error || '저장된 비밀번호를 불러올 수 없습니다.';
@@ -114,7 +115,7 @@ export function useTistoryAccounts() {
     setAddAccountStatus({ message: '카카오 로그인 시도 중...', step: 1, totalSteps: 3 });
 
     try {
-      const response = await fetch('/auth/test-login', {
+      const response = await fetch(`${API_BASE}/auth/test-login`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -138,7 +139,7 @@ export function useTistoryAccounts() {
         if (!saveCredentialChecked) {
           try {
             const delParams = ownerEmail ? `&ownerEmail=${encodeURIComponent(ownerEmail)}` : '';
-            await fetch(`/auth/credentials?email=${encodeURIComponent(newAccountEmail)}${delParams}`, { method: 'DELETE' });
+            await fetch(`${API_BASE}/auth/credentials?email=${encodeURIComponent(newAccountEmail)}${delParams}`, { method: 'DELETE' });
           } catch { /* 무시 */ }
         }
 
@@ -176,7 +177,7 @@ export function useTistoryAccounts() {
     setAddAccountStatus({ message: '로그인 브라우저 준비 중...', step: 1, totalSteps: 4 });
 
     try {
-      const response = await fetch('/auth/start-login', {
+      const response = await fetch(`${API_BASE}/auth/start-login`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email: newAccountEmail, ownerEmail }),
@@ -219,7 +220,7 @@ export function useTistoryAccounts() {
         await new Promise((resolve) => setTimeout(resolve, pollingInterval));
 
         try {
-          const statusResponse = await fetch(`/auth/login-status/${sessionId}`);
+          const statusResponse = await fetch(`${API_BASE}/auth/login-status/${sessionId}`);
           const statusResult = await safeJsonParse(statusResponse);
           if (!statusResult.ok || !statusResult.data) {
             console.error('Polling error:', statusResult.error);
@@ -288,7 +289,7 @@ export function useTistoryAccounts() {
 
     try {
       const ownerParam = ownerEmail ? `&ownerEmail=${encodeURIComponent(ownerEmail)}` : '';
-      const response = await fetch(`/auth/cookies?email=${encodeURIComponent(email)}${ownerParam}`, {
+      const response = await fetch(`${API_BASE}/auth/cookies?email=${encodeURIComponent(email)}${ownerParam}`, {
         method: 'DELETE',
       });
 

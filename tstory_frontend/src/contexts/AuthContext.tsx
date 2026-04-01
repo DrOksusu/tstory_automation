@@ -1,6 +1,7 @@
 'use client';
 
 import { createContext, useContext, useState, useEffect, ReactNode, useCallback } from 'react';
+import { API_BASE } from '@/utils/apiBase';
 
 interface User {
   email: string;
@@ -21,7 +22,7 @@ const AUTH_STORAGE_KEY = 'tstory_auth_user';
 
 async function checkAdminStatus(email: string): Promise<boolean> {
   try {
-    const res = await fetch(`/api/admin/check?email=${encodeURIComponent(email)}`);
+    const res = await fetch(`${API_BASE}/api/admin/check?email=${encodeURIComponent(email)}`);
     if (!res.ok) return false;
     const data = await res.json();
     return data.isAdmin === true;

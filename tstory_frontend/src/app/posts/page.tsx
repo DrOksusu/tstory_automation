@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { API_BASE } from '@/utils/apiBase';
 
 interface BlogPost {
   id: number;
@@ -26,7 +27,7 @@ export default function PostsPage() {
 
   const fetchPosts = async () => {
     try {
-      const response = await fetch('/api/blog/posts');
+      const response = await fetch(`${API_BASE}/api/blog/posts`);
       const data = await response.json();
 
       if (data.success) {

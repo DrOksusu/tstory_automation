@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
+import { API_BASE } from '@/utils/apiBase';
 import type { RecentPost } from '../hooks/useBlogPublish';
 
 interface PromptTemplate {
@@ -63,7 +64,7 @@ export default function BlogForm({
 
   const fetchPrompts = useCallback(async () => {
     try {
-      const res = await fetch('/api/blog/prompts');
+      const res = await fetch(`${API_BASE}/api/blog/prompts`);
       const data = await res.json();
       if (data.success) setPromptTemplates(data.prompts);
     } catch (err) {
@@ -92,7 +93,7 @@ export default function BlogForm({
     const content = formData.systemPrompt || DEFAULT_SYSTEM_PROMPT;
     setSavingPrompt(true);
     try {
-      const res = await fetch('/api/blog/prompts', {
+      const res = await fetch(`${API_BASE}/api/blog/prompts`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ name: newPromptName.trim(), content }),
@@ -116,7 +117,7 @@ export default function BlogForm({
     const template = promptTemplates.find(t => t.id === Number(selectedPromptId));
     if (!template || !confirm(`"${template.name}" 프롬프트를 삭제하시겠습니까?`)) return;
     try {
-      await fetch(`/api/blog/prompts/${selectedPromptId}`, { method: 'DELETE' });
+      await fetch(`${API_BASE}/api/blog/prompts/${selectedPromptId}`, { method: 'DELETE' });
       setSelectedPromptId('default');
       setFormData({ ...formData, systemPrompt: '' });
       await fetchPrompts();

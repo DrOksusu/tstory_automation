@@ -1,6 +1,7 @@
 // 블로그 미리보기/발행 관련 훅
 
 import { useState, useEffect } from 'react';
+import { API_BASE } from '@/utils/apiBase';
 import { safeJsonParse } from '../utils/api';
 import { useAuth } from '../contexts/AuthContext';
 import type { PreviewData, PublishResult, PublishProgress } from '../types/blog';
@@ -39,7 +40,7 @@ export function useBlogPublish(selectedAccount: string | null) {
   useEffect(() => {
     const fetchRecentPosts = async () => {
       try {
-        const response = await fetch('/api/blog/posts');
+        const response = await fetch(`${API_BASE}/api/blog/posts`);
         const data = await response.json();
         if (data.success && Array.isArray(data.posts)) {
           const recent: RecentPost[] = data.posts.slice(0, 10).map((p: RecentPost & { blogName?: string }) => ({
@@ -69,7 +70,7 @@ export function useBlogPublish(selectedAccount: string | null) {
 
     const fetchBlogNames = async () => {
       try {
-        const response = await fetch('/api/blog/blog-names');
+        const response = await fetch(`${API_BASE}/api/blog/blog-names`);
         const data = await response.json();
         if (data.success && Array.isArray(data.blogNames)) {
           setBlogNames(data.blogNames);
@@ -106,7 +107,7 @@ export function useBlogPublish(selectedAccount: string | null) {
       const { avgDurationMs, sampleCount } = await fetchAvgDuration('preview');
       const estimatedTotalMs = sampleCount >= 3 ? avgDurationMs : null;
 
-      const startResponse = await fetch('/api/blog/start-preview', {
+      const startResponse = await fetch(`${API_BASE}/api/blog/start-preview`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ ...formData, aiModel: formData.aiModel }),
@@ -131,7 +132,7 @@ export function useBlogPublish(selectedAccount: string | null) {
       while (Date.now() - startTime < maxPollingTime) {
         await new Promise((resolve) => setTimeout(resolve, pollingInterval));
 
-        const statusResponse = await fetch(`/api/blog/status/${taskId}`);
+        const statusResponse = await fetch(`${API_BASE}/api/blog/status/${taskId}`);
         const statusResult = await safeJsonParse(statusResponse);
         if (!statusResult.ok || !statusResult.data) {
           console.error('Status polling error:', statusResult.error);
@@ -195,7 +196,7 @@ export function useBlogPublish(selectedAccount: string | null) {
   const fetchAvgDuration = async (type?: 'preview' | 'publish'): Promise<{ avgDurationMs: number | null; sampleCount: number }> => {
     try {
       const query = type ? `?type=${type}` : '';
-      const response = await fetch(`/api/blog/avg-duration${query}`);
+      const response = await fetch(`${API_BASE}/api/blog/avg-duration${query}`);
       const data = await response.json();
       if (data.success) {
         return { avgDurationMs: data.avgDurationMs, sampleCount: data.sampleCount };
@@ -227,7 +228,7 @@ export function useBlogPublish(selectedAccount: string | null) {
       const { avgDurationMs, sampleCount } = await fetchAvgDuration();
       const estimatedTotalMs = sampleCount >= 3 ? avgDurationMs : null;
 
-      const startResponse = await fetch('/api/blog/start-generate', {
+      const startResponse = await fetch(`${API_BASE}/api/blog/start-generate`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ ...formData, aiModel: formData.aiModel, userEmail: selectedAccount, ownerEmail }),
@@ -252,7 +253,7 @@ export function useBlogPublish(selectedAccount: string | null) {
       while (Date.now() - startTime < maxPollingTime) {
         await new Promise((resolve) => setTimeout(resolve, pollingInterval));
 
-        const statusResponse = await fetch(`/api/blog/status/${taskId}`);
+        const statusResponse = await fetch(`${API_BASE}/api/blog/status/${taskId}`);
         const statusResult = await safeJsonParse(statusResponse);
         if (!statusResult.ok || !statusResult.data) {
           console.error('Status polling error:', statusResult.error);
@@ -327,7 +328,7 @@ export function useBlogPublish(selectedAccount: string | null) {
       const { avgDurationMs, sampleCount } = await fetchAvgDuration();
       const estimatedTotalMs = sampleCount >= 3 ? avgDurationMs : null;
 
-      const startResponse = await fetch('/api/blog/publish-content', {
+      const startResponse = await fetch(`${API_BASE}/api/blog/publish-content`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -359,7 +360,7 @@ export function useBlogPublish(selectedAccount: string | null) {
       while (Date.now() - startTime < maxPollingTime) {
         await new Promise((resolve) => setTimeout(resolve, pollingInterval));
 
-        const statusResponse = await fetch(`/api/blog/status/${taskId}`);
+        const statusResponse = await fetch(`${API_BASE}/api/blog/status/${taskId}`);
         const statusResult = await safeJsonParse(statusResponse);
         if (!statusResult.ok || !statusResult.data) {
           console.error('Status polling error:', statusResult.error);

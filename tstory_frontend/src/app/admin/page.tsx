@@ -3,6 +3,7 @@
 import { useAuth } from '@/contexts/AuthContext';
 import { useRouter } from 'next/navigation';
 import { useState, useEffect, useCallback } from 'react';
+import { API_BASE } from '@/utils/apiBase';
 import { ErrorLog, ErrorStats, Pagination, ProcessLog, ProcessLogSession } from '@/types/admin';
 
 type TabType = 'errors' | 'process';
@@ -82,7 +83,7 @@ function ErrorLogTab({ email }: { email: string }) {
 
   const fetchStats = useCallback(async () => {
     try {
-      const res = await fetch(`/api/admin/errors/stats?email=${encodeURIComponent(email)}`);
+      const res = await fetch(`${API_BASE}/api/admin/errors/stats?email=${encodeURIComponent(email)}`);
       const data = await res.json();
       if (data.success) setStats(data.stats);
     } catch (err) {
@@ -95,7 +96,7 @@ function ErrorLogTab({ email }: { email: string }) {
     try {
       const params = new URLSearchParams({ email, page: String(page), limit: '20' });
       if (statusFilter) params.set('statusCode', statusFilter);
-      const res = await fetch(`/api/admin/errors?${params}`);
+      const res = await fetch(`${API_BASE}/api/admin/errors?${params}`);
       const data = await res.json();
       if (data.success) {
         setErrors(data.errors);
@@ -248,7 +249,7 @@ function ProcessLogTab({ email }: { email: string }) {
     try {
       const params = new URLSearchParams({ email, limit: '30' });
       if (sourceFilter) params.set('source', sourceFilter);
-      const res = await fetch(`/api/admin/process-logs/sessions?${params}`);
+      const res = await fetch(`${API_BASE}/api/admin/process-logs/sessions?${params}`);
       const data = await res.json();
       if (data.success) setSessions(data.sessions);
     } catch (err) {
@@ -261,7 +262,7 @@ function ProcessLogTab({ email }: { email: string }) {
   const fetchSessionLogs = useCallback(async (sessionId: string) => {
     setLogsLoading(true);
     try {
-      const res = await fetch(`/api/admin/process-logs/session/${sessionId}?email=${encodeURIComponent(email)}`);
+      const res = await fetch(`${API_BASE}/api/admin/process-logs/session/${sessionId}?email=${encodeURIComponent(email)}`);
       const data = await res.json();
       if (data.success) {
         setSessionLogs(data.logs);
