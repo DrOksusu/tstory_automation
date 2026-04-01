@@ -288,33 +288,50 @@ export default function Home() {
             </p>
 
             <div className="space-y-4">
-              {/* 저장된 자격증명 드롭다운 */}
-              {savedCredentials.length > 0 && (
-                <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-1">저장된 계정 선택</label>
-                  <select
-                    onChange={(e) => {
-                      const value = e.target.value;
-                      if (value === '') {
-                        setNewAccountEmail('');
-                        setNewAccountPassword('');
-                      } else {
-                        handleSelectCredential(value);
-                      }
-                    }}
-                    value={savedCredentials.some((c) => c.userEmail === newAccountEmail) ? newAccountEmail : ''}
-                    className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500 bg-white text-slate-800"
-                    disabled={addingAccount}
-                  >
-                    <option value="">+ 새 계정 입력</option>
-                    {savedCredentials.map((cred) => (
-                      <option key={cred.userEmail} value={cred.userEmail}>
-                        {cred.userEmail}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              )}
+              {/* 저장된 계정 드롭다운 (자격증명 + 쿠키만 있는 계정 통합) */}
+              {(() => {
+                const credEmails = new Set(savedCredentials.map(c => c.userEmail));
+                const cookieOnlyAccounts = accounts.filter(a => !credEmails.has(a.userEmail));
+                const hasAnyAccount = savedCredentials.length > 0 || cookieOnlyAccounts.length > 0;
+                if (!hasAnyAccount) return null;
+                return (
+                  <div>
+                    <label className="block text-sm font-medium text-slate-700 mb-1">저장된 계정 선택</label>
+                    <select
+                      onChange={(e) => {
+                        const value = e.target.value;
+                        if (value === '') {
+                          setNewAccountEmail('');
+                          setNewAccountPassword('');
+                        } else {
+                          setNewAccountEmail(value);
+                          // 자격증명이 저장된 계정이면 비밀번호 자동입력
+                          if (credEmails.has(value)) {
+                            handleSelectCredential(value);
+                          } else {
+                            setNewAccountPassword('');
+                          }
+                        }
+                      }}
+                      value={[...credEmails, ...cookieOnlyAccounts.map(a => a.userEmail)].includes(newAccountEmail) ? newAccountEmail : ''}
+                      className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500 bg-white text-slate-800"
+                      disabled={addingAccount}
+                    >
+                      <option value="">+ 새 계정 입력</option>
+                      {savedCredentials.map((cred) => (
+                        <option key={cred.userEmail} value={cred.userEmail}>
+                          {cred.userEmail}
+                        </option>
+                      ))}
+                      {cookieOnlyAccounts.map((acc) => (
+                        <option key={acc.userEmail} value={acc.userEmail}>
+                          {acc.userEmail} (비밀번호 미저장)
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                );
+              })()}
 
               <div>
                 <label className="block text-sm font-medium text-slate-700 mb-1">카카오 이메일</label>
