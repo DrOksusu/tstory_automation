@@ -79,6 +79,21 @@ export async function loginToTistory(page: Page, credentials?: { email: string; 
   const password = credentials?.password || config.kakao.password;
   const logger = createLogger('auth', undefined, ownerEmail || email);
   try {
+    // 기존 카카오 세션 쿠키 제거 (다른 계정 세션이 남아있으면 2FA가 잘못된 계정으로 감)
+    logger.info(`Clearing existing Kakao cookies before login as ${email}...`);
+    const allCookies = await page.cookies('https://accounts.kakao.com', 'https://kauth.kakao.com', 'https://logins.daum.net');
+    if (allCookies.length > 0) {
+      logger.info(`Removing ${allCookies.length} Kakao/Daum cookies...`);
+      const client = await page.createCDPSession();
+      for (const cookie of allCookies) {
+        await client.send('Network.deleteCookies', {
+          name: cookie.name,
+          domain: cookie.domain,
+        });
+      }
+      await client.detach();
+    }
+
     logger.info('Navigating to Tistory login page...');
 
     // 티스토리 로그인 페이지로 이동
