@@ -119,16 +119,20 @@ export async function publishToTistory(params: {
         }
       }
 
-      if (!credentials) {
-        // 저장된 자격증명이 없으면 config에서 기본 계정 사용
-        if (config.kakao.email && config.kakao.password) {
-          credentials = { email: config.kakao.email, password: config.kakao.password };
-          logger.info('Using default credentials from config...');
-        }
+      if (!credentials && userEmail) {
+        // 특정 사용자 계정의 자격증명이 없으면 다른 계정으로 폴백하지 않음
+        logger.error(`${userEmail}의 저장된 자격증명이 없습니다. 계정 관리에서 다시 로그인해주세요.`);
+        throw new Error(`${userEmail}의 저장된 자격증명이 없습니다. 계정 관리에서 비밀번호를 입력 후 자동 로그인해주세요.`);
       }
 
       if (!credentials) {
-        throw new Error('로그인이 만료되었고 저장된 자격증명이 없습니다. 프론트엔드에서 다시 로그인해주세요.');
+        // userEmail이 없는 경우에만 기본 계정 사용
+        if (config.kakao.email && config.kakao.password) {
+          credentials = { email: config.kakao.email, password: config.kakao.password };
+          logger.info('Using default credentials from config...');
+        } else {
+          throw new Error('로그인이 만료되었고 저장된 자격증명이 없습니다. 프론트엔드에서 다시 로그인해주세요.');
+        }
       }
 
       // 2FA 대기 시 프론트엔드에 라이브 뷰 URL 포함하여 진행 상태 전달
