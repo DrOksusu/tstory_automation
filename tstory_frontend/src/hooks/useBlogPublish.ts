@@ -68,18 +68,26 @@ export function useBlogPublish(selectedAccount: string | null) {
       }
     };
 
+    fetchRecentPosts();
+  }, []);
+
+  // 계정 변경 시 블로그 이름 목록 재조회
+  useEffect(() => {
     const fetchBlogNames = async () => {
       try {
-        const response = await fetch(`${API_BASE}/api/blog/blog-names`);
+        const params = selectedAccount ? `?userEmail=${encodeURIComponent(selectedAccount)}` : '';
+        const response = await fetch(`${API_BASE}/api/blog/blog-names${params}`);
         const data = await response.json();
         if (data.success && Array.isArray(data.blogNames)) {
           setBlogNames(data.blogNames);
-          // 블로그 이름이 아직 없으면 최근 사용한 것으로 설정
+          // 계정 변경 시 해당 계정의 첫 번째 블로그로 자동 선택
           if (data.blogNames.length > 0) {
             setFormData((prev) => ({
               ...prev,
-              blogName: prev.blogName || data.blogNames[0],
+              blogName: data.blogNames[0],
             }));
+          } else {
+            setFormData((prev) => ({ ...prev, blogName: '' }));
           }
         }
       } catch (error) {
@@ -87,9 +95,8 @@ export function useBlogPublish(selectedAccount: string | null) {
       }
     };
 
-    fetchRecentPosts();
     fetchBlogNames();
-  }, []);
+  }, [selectedAccount]);
 
   // 미리보기 요청 (폴링 방식)
   const handlePreview = async () => {

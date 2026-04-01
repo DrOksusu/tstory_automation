@@ -179,6 +179,7 @@ async function runGenerateTask(
         title: generatedContent.title,
         content: cleanedContent,
         blogName: blogName || null,
+        userEmail: userEmail || null,
         status: 'created',
       },
     });
@@ -360,6 +361,7 @@ async function runPublishContentTask(
         title: title,
         content: content,
         blogName: blogName || null,
+        userEmail: userEmail || null,
         status: 'created',
       },
     });
@@ -494,6 +496,7 @@ export async function generateAndPublish(
         title: generatedContent.title,
         content: cleanedContent,
         blogName: blogName || null,
+        userEmail: userEmail || null,
         status: 'created',
       },
     });
@@ -787,10 +790,14 @@ export async function getPosts(req: Request, res: Response): Promise<void> {
  */
 export async function getBlogNames(req: Request, res: Response): Promise<void> {
   try {
+    const userEmail = req.query.userEmail as string | undefined;
+    const where: Record<string, unknown> = { blogName: { not: null } };
+    if (userEmail) {
+      where.userEmail = userEmail;
+    }
+
     const posts = await prisma.blogPost.findMany({
-      where: {
-        blogName: { not: null },
-      },
+      where,
       select: {
         blogName: true,
         createdAt: true,

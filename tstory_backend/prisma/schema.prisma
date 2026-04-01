@@ -16,6 +16,7 @@ model BlogPost {
   title         String   @db.VarChar(255) // 생성된 제목
   content       String   @db.LongText // 생성된 HTML 콘텐츠
   blogName      String?  @db.VarChar(100) // 발행 대상 블로그 이름 (예: my-blog)
+  userEmail     String?  @db.VarChar(255) // 발행한 카카오 계정 이메일
   tistoryPostId String?  @db.VarChar(100) // 티스토리 발행 후 포스트 ID
   durationMs    Int?     // 발행 소요시간 (밀리초)
   previewDurationMs Int? // 미리보기(AI 생성) 소요시간 (밀리초)
@@ -25,6 +26,7 @@ model BlogPost {
 
   @@index([status])
   @@index([createdAt])
+  @@index([userEmail])
 }
 
 // 프롬프트 템플릿 관리
