@@ -1,0 +1,12 @@
+{
+  "rewrites": [
+    {
+      "source": "/api/:path*",
+      "destination": "https://tstory-api.3-37-159-141.sslip.io/api/:path*"
+    },
+    {
+      "source": "/auth/:path*",
+      "destination": "https://tstory-api.3-37-159-141.sslip.io/auth/:path*"
+    }
+  ]
+}

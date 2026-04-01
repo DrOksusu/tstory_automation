@@ -1,17 +1,18 @@
 import type { NextConfig } from 'next';
 
-const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:3020';
-
 const nextConfig: NextConfig = {
+  // 로컬 개발용 rewrites (Vercel에서는 vercel.json이 우선됨)
   async rewrites() {
+    // production에서는 vercel.json에서 처리
+    if (process.env.VERCEL) return [];
     return [
       {
         source: '/api/:path*',
-        destination: `${backendUrl}/api/:path*`,
+        destination: 'http://localhost:3020/api/:path*',
       },
       {
         source: '/auth/:path*',
-        destination: `${backendUrl}/auth/:path*`,
+        destination: 'http://localhost:3020/auth/:path*',
       },
     ];
   },
