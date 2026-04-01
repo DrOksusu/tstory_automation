@@ -23,3 +23,25 @@ export interface Pagination {
   total: number;
   totalPages: number;
 }
+
+export interface ProcessLog {
+  id: number;
+  sessionId: string;
+  source: string;
+  level: string;
+  message: string;
+  userEmail: string | null;
+  metadata: string | null;
+  createdAt: string;
+}
+
+export interface ProcessLogSession {
+  sessionId: string;
+  source: string;
+  userEmail: string | null;
+  logCount: number;
+  errorCount: number;
+  startedAt: string;
+  endedAt: string;
+  lastMessage: string;
+}

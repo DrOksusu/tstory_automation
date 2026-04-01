@@ -10,6 +10,7 @@ import { connectToBrowserbase, getOrCreateContext } from './browserbaseConnector
 import { delay } from './tistoryUtils';
 import { getUserDataDir, closeExistingBrowser, registerBrowser, unregisterBrowser } from '../utils/browserProfile';
 import { getCredential } from './credentialService';
+import { createLogger } from './processLogService';
 
 /**
  * 티스토리에 글 발행 (Puppeteer)
@@ -25,10 +26,11 @@ export async function publishToTistory(params: {
 }): Promise<TistoryPublishResult> {
   const { title, content, tag, userEmail, ownerEmail, blogName, onProgress } = params;
   const targetBlog = blogName || config.tistory.blogName;
+  const logger = createLogger('publish', undefined, userEmail);
 
   // 진행 상태 리포터
   const report = (msg: string) => {
-    console.log(msg);
+    logger.info(msg);
     onProgress?.(msg);
   };
 
@@ -43,7 +45,7 @@ export async function publishToTistory(params: {
     useBrowserbase = config.browserbase.enabled && process.env.NODE_ENV === 'production';
 
     if (useBrowserbase) {
-      console.log('Connecting to Browserbase for publishing...');
+      logger.info('Connecting to Browserbase for publishing...');
       // Context를 통해 세션 간 쿠키/localStorage 유지
       const contextId = (userEmail && ownerEmail)
         ? await getOrCreateContext(userEmail, ownerEmail)
@@ -51,11 +53,11 @@ export async function publishToTistory(params: {
       const result = await connectToBrowserbase(contextId);
       browser = result.browser;
       liveViewUrl = result.liveViewUrl;
-      console.log('Connected to Browserbase');
+      logger.info('Connected to Browserbase');
     } else {
       // 로컬 Puppeteer 사용
       const isHeadless = process.env.HEADLESS === 'true' || process.env.NODE_ENV === 'production';
-      console.log(`Puppeteer launch starting... (headless: ${isHeadless})`);
+      logger.info(`Puppeteer launch starting... (headless: ${isHeadless})`);
 
       // 동일 프로필로 실행 중인 브라우저가 있으면 먼저 종료
       const profileDir = getUserDataDir(userEmail);
@@ -79,7 +81,7 @@ export async function publishToTistory(params: {
         timeout: 60000,
       });
 
-      console.log('Browser launched successfully');
+      logger.info('Browser launched successfully');
       registerBrowser(profileDir, browser);
     }
 
@@ -98,13 +100,13 @@ export async function publishToTistory(params: {
     // 쿠키 로드 시도
     report('로그인 상태 확인 중...');
     const cookiesLoaded = await loadCookies(page, userEmail, ownerEmail);
-    console.log(`Cookies loaded: ${cookiesLoaded} (user: ${userEmail || 'none'}, owner: ${ownerEmail || 'none'})`);
+    logger.info(`Cookies loaded: ${cookiesLoaded} (user: ${userEmail || 'none'}, owner: ${ownerEmail || 'none'})`);
 
     // 로그인 상태 확인
     const loggedIn = await isLoggedIn(page, targetBlog);
 
     if (!loggedIn) {
-      console.log('Not logged in or session expired');
+      logger.info('Not logged in or session expired');
 
       // 저장된 자격증명으로 자동 재로그인 시도 (Browserbase 포함)
       report('자동 재로그인 시도 중...');
@@ -113,7 +115,7 @@ export async function publishToTistory(params: {
       if (userEmail) {
         credentials = await getCredential(userEmail, ownerEmail);
         if (credentials) {
-          console.log(`Saved credentials found for ${userEmail}, attempting auto re-login...`);
+          logger.info(`Saved credentials found for ${userEmail}, attempting auto re-login...`);
         }
       }
 
@@ -121,7 +123,7 @@ export async function publishToTistory(params: {
         // 저장된 자격증명이 없으면 config에서 기본 계정 사용
         if (config.kakao.email && config.kakao.password) {
           credentials = { email: config.kakao.email, password: config.kakao.password };
-          console.log('Using default credentials from config...');
+          logger.info('Using default credentials from config...');
         }
       }
 
@@ -155,10 +157,10 @@ export async function publishToTistory(params: {
 
     // "이어서 작성하시겠습니까?" 다이얼로그 핸들러 등록 (페이지 이동 전에 설정해야 함)
     page.on('dialog', async (dialog) => {
-      console.log(`Dialog appeared: ${dialog.type()} - ${dialog.message()}`);
+      logger.info(`Dialog appeared: ${dialog.type()} - ${dialog.message()}`);
       // 이어서 작성 관련 다이얼로그는 취소 (dismiss)
       if (dialog.message().includes('이어서') || dialog.message().includes('저장된 글')) {
-        console.log('Dismissing "Continue writing?" dialog...');
+        logger.info('Dismissing "Continue writing?" dialog...');
         await dialog.dismiss();
       } else {
         // 다른 다이얼로그는 확인
@@ -168,7 +170,7 @@ export async function publishToTistory(params: {
 
     // 글쓰기 페이지로 이동 시도
     const writeUrl = `https://${targetBlog}.tistory.com/manage/newpost`;
-    console.log('Navigating to:', writeUrl);
+    logger.info(`Navigating to: ${writeUrl}`);
     await page.goto(writeUrl, {
       waitUntil: 'domcontentloaded',
       timeout: 60000,
@@ -177,14 +179,14 @@ export async function publishToTistory(params: {
 
     // 글쓰기 페이지 접근 확인
     let currentUrl = page.url();
-    console.log('Current URL after navigation:', currentUrl);
+    logger.info(`Current URL after navigation: ${currentUrl}`);
 
     // 글쓰기 페이지가 아니면 처리
     if (!currentUrl.includes('newpost') && !currentUrl.includes('manage')) {
-      console.log('========================================');
-      console.log('글쓰기 페이지에 접근할 수 없습니다.');
-      console.log(`Current URL: ${currentUrl}`);
-      console.log('========================================');
+      logger.info('========================================');
+      logger.info('글쓰기 페이지에 접근할 수 없습니다.');
+      logger.info(`Current URL: ${currentUrl}`);
+      logger.info('========================================');
 
       // 로그인 페이지로 리다이렉트되었거나 블로그 홈으로 갔으면 세션 만료
       const isLoginPage = currentUrl.includes('login') || currentUrl.includes('auth') || currentUrl.includes('kakao');
@@ -194,24 +196,24 @@ export async function publishToTistory(params: {
       if (isLoginPage || isBlogHome) {
         // Browserbase 환경에서는 에러 반환
         if (config.browserbase.enabled) {
-          console.log('Session expired - user needs to re-login');
+          logger.info('Session expired - user needs to re-login');
           throw new Error('로그인이 만료되었습니다. 프론트엔드에서 "카카오 로그인" 버튼을 클릭하여 다시 로그인해주세요.');
         }
       }
 
       // 로컬 환경에서만 대기 (Browserbase에서는 즉시 에러)
       if (!config.browserbase.enabled) {
-        console.log('로컬 환경: 사용자가 직접 글쓰기 페이지로 이동할 때까지 대기...');
+        logger.info('로컬 환경: 사용자가 직접 글쓰기 페이지로 이동할 때까지 대기...');
         const waitStart = Date.now();
         const waitMax = 180000;
 
         while ((Date.now() - waitStart) < waitMax) {
           await delay(2000);
           currentUrl = page.url();
-          console.log(`Waiting for write page... Current: ${currentUrl}`);
+          logger.info(`Waiting for write page... Current: ${currentUrl}`);
 
           if (currentUrl.includes('newpost') || currentUrl.includes('manage/post') || currentUrl.includes('/write')) {
-            console.log('글쓰기 페이지 도달!');
+            logger.info('글쓰기 페이지 도달!');
             await delay(2000);
             break;
           }
@@ -230,10 +232,10 @@ export async function publishToTistory(params: {
 
     // 디버깅용 스크린샷 저장
     await page.screenshot({ path: 'tistory-editor-debug.png', fullPage: true });
-    console.log('Debug screenshot saved: tistory-editor-debug.png');
+    logger.info('Debug screenshot saved: tistory-editor-debug.png');
 
     // 현재 URL 확인
-    console.log('Current page URL:', page.url());
+    logger.info(`Current page URL: ${page.url()}`);
 
     // 여러 에디터 선택자 시도
     const editorSelectors = [
@@ -252,7 +254,7 @@ export async function publishToTistory(params: {
     for (const selector of editorSelectors) {
       try {
         await page.waitForSelector(selector, { timeout: 5000 });
-        console.log(`Editor found with selector: ${selector}`);
+        logger.info(`Editor found with selector: ${selector}`);
         editorFound = true;
         break;
       } catch {
@@ -262,13 +264,13 @@ export async function publishToTistory(params: {
 
     if (!editorFound) {
       // 선택자를 찾지 못해도 계속 진행 (에디터가 다른 방식으로 로드될 수 있음)
-      console.log('Editor selector not found, continuing anyway...');
+      logger.info('Editor selector not found, continuing anyway...');
       await delay(2000);
     }
 
     // 제목 입력
     report('제목을 입력하는 중...');
-    console.log('========== STEP 1: 제목 입력 ==========');
+    logger.info('========== STEP 1: 제목 입력 ==========');
     const titleSelectors = [
       'input[name="title"]',
       '#post-title-inp',
@@ -285,7 +287,7 @@ export async function publishToTistory(params: {
         if (titleInput) {
           await page.click(selector);
           await page.type(selector, title, { delay: 30 });
-          console.log(`Title entered with selector: ${selector}`);
+          logger.info(`Title entered with selector: ${selector}`);
           titleEntered = true;
           break;
         }
@@ -295,7 +297,7 @@ export async function publishToTistory(params: {
     }
 
     if (!titleEntered) {
-      console.log('Title input not found, trying to find any input...');
+      logger.info('Title input not found, trying to find any input...');
       const firstInput = await page.$('input[type="text"]');
       if (firstInput) {
         await firstInput.click();
@@ -305,11 +307,11 @@ export async function publishToTistory(params: {
 
     // 제목 입력 후 스크린샷
     await page.screenshot({ path: 'step1-title.png', fullPage: true });
-    console.log('Screenshot saved: step1-title.png');
+    logger.info('Screenshot saved: step1-title.png');
     await delay(2000);
 
     // 에디터 모드 확인 및 HTML 모드로 전환
-    console.log('Switching to HTML mode...');
+    logger.info('Switching to HTML mode...');
 
     // "기본모드" 드롭다운 클릭해서 HTML 모드 선택
     try {
@@ -325,20 +327,20 @@ export async function publishToTistory(params: {
       if (htmlModeButton) {
         await htmlModeButton.click();
         await delay(1000);
-        console.log('Switched to HTML mode');
+        logger.info('Switched to HTML mode');
       }
     } catch (e) {
-      console.log('HTML mode switch failed, continuing with default mode');
+      logger.info('HTML mode switch failed, continuing with default mode');
     }
 
     // 본문 입력
     report('본문을 입력하는 중...');
-    console.log('========== STEP 2: 본문 입력 ==========');
-    console.log('Content length:', content.length, 'characters');
-    console.log('Content preview (first 500 chars):', content.substring(0, 500));
+    logger.info('========== STEP 2: 본문 입력 ==========');
+    logger.info(`Content length: ${content.length} characters`);
+    logger.info(`Content preview (first 500 chars): ${content.substring(0, 500)}`);
 
     // 에디터 DOM 구조 상세 분석
-    console.log('\n=== 에디터 DOM 구조 분석 ===');
+    logger.info('=== 에디터 DOM 구조 분석 ===');
     const domAnalysis = await page.evaluate(() => {
       const results: string[] = [];
 
@@ -398,8 +400,8 @@ export async function publishToTistory(params: {
 
       return results.join('\n');
     });
-    console.log(domAnalysis);
-    console.log('=== DOM 분석 끝 ===\n');
+    logger.info(domAnalysis);
+    logger.info('=== DOM 분석 끝 ===');
 
     let contentEntered = false;
 
@@ -440,19 +442,19 @@ export async function publishToTistory(params: {
     };
 
     const plainText = htmlToPlainText(content);
-    console.log('Plain text length:', plainText.length);
-    console.log('Plain text preview (first 300 chars):', plainText.substring(0, 300));
+    logger.info(`Plain text length: ${plainText.length}`);
+    logger.info(`Plain text preview (first 300 chars): ${plainText.substring(0, 300)}`);
 
     // 방법 1: ProseMirror 에디터에 HTML 직접 주입
-    console.log('\n--- 방법 1: ProseMirror HTML 주입 ---');
+    logger.info('--- 방법 1: ProseMirror HTML 주입 ---');
     try {
       const proseMirror = await page.$('.ProseMirror');
       if (proseMirror) {
-        console.log('ProseMirror 요소 발견');
+        logger.info('ProseMirror 요소 발견');
 
         const box = await proseMirror.boundingBox();
         if (box && box.height > 50) {
-          console.log(`ProseMirror HTML 주입 시작 (${content.length}자)...`);
+          logger.info(`ProseMirror HTML 주입 시작 (${content.length}자)...`);
           const injected = await page.evaluate((htmlContent: string) => {
             const pm = document.querySelector('.ProseMirror');
             if (pm) {
@@ -463,26 +465,26 @@ export async function publishToTistory(params: {
             return 0;
           }, content);
 
-          console.log(`ProseMirror 주입 완료, 텍스트 길이: ${injected}자`);
+          logger.info(`ProseMirror 주입 완료, 텍스트 길이: ${injected}자`);
           if (injected > 50) {
             contentEntered = true;
           }
         } else {
-          console.log('ProseMirror boundingBox가 유효하지 않음');
+          logger.info('ProseMirror boundingBox가 유효하지 않음');
         }
       } else {
-        console.log('ProseMirror 요소 없음');
+        logger.info('ProseMirror 요소 없음');
       }
     } catch (e) {
-      console.log('방법 1 실패:', e);
+      logger.info(`방법 1 실패: ${e}`);
     }
 
     // 방법 2: iframe 내부 에디터에 HTML 직접 주입 (타이핑 대신 evaluate 사용)
     if (!contentEntered) {
-      console.log('\n--- 방법 2: iframe 에디터에 HTML 직접 주입 ---');
+      logger.info('--- 방법 2: iframe 에디터에 HTML 직접 주입 ---');
       try {
         const iframes = await page.$$('iframe');
-        console.log(`iframe 개수: ${iframes.length}`);
+        logger.info(`iframe 개수: ${iframes.length}`);
 
         for (let i = 0; i < iframes.length; i++) {
           const frame = await iframes[i].contentFrame();
@@ -491,10 +493,10 @@ export async function publishToTistory(params: {
             if (editorInFrame) {
               const box = await editorInFrame.boundingBox();
               if (box && box.height > 100) {
-                console.log(`iframe ${i}에서 에디터 발견 (크기: ${box.width}x${box.height})`);
+                logger.info(`iframe ${i}에서 에디터 발견 (크기: ${box.width}x${box.height})`);
 
                 // HTML을 evaluate로 즉시 주입 (타이핑 대신)
-                console.log(`HTML 직접 주입 시작 (${content.length}자)...`);
+                logger.info(`HTML 직접 주입 시작 (${content.length}자)...`);
                 const injected = await frame.evaluate((htmlContent: string) => {
                   const body = document.body;
                   if (body) {
@@ -507,10 +509,10 @@ export async function publishToTistory(params: {
                   return 0;
                 }, content);
 
-                console.log(`HTML 주입 완료, 텍스트 길이: ${injected}자`);
+                logger.info(`HTML 주입 완료, 텍스트 길이: ${injected}자`);
 
                 if (injected > 50) {
-                  console.log('iframe HTML 주입 성공!');
+                  logger.info('iframe HTML 주입 성공!');
                   contentEntered = true;
                   break;
                 }
@@ -519,52 +521,52 @@ export async function publishToTistory(params: {
           }
         }
       } catch (e) {
-        console.log('방법 2 실패:', e);
+        logger.info(`방법 2 실패: ${e}`);
       }
     }
 
     // 방법 3: textarea 직접 입력
     if (!contentEntered) {
-      console.log('\n--- 방법 3: textarea 직접 입력 ---');
+      logger.info('--- 방법 3: textarea 직접 입력 ---');
       try {
         const textareas = await page.$$('textarea');
-        console.log(`textarea 개수: ${textareas.length}`);
+        logger.info(`textarea 개수: ${textareas.length}`);
 
         for (let i = 0; i < textareas.length; i++) {
           const ta = textareas[i];
           const box = await ta.boundingBox();
           if (box && box.height > 100) {
-            console.log(`textarea ${i} 발견 (크기: ${box.width}x${box.height})`);
+            logger.info(`textarea ${i} 발견 (크기: ${box.width}x${box.height})`);
             await ta.click();
             await delay(300);
             await ta.type(plainText.substring(0, 500), { delay: 0 });
 
             const taValue = await ta.evaluate((el: HTMLTextAreaElement) => el.value);
             if (taValue && taValue.length > 50) {
-              console.log('textarea 입력 성공!');
+              logger.info('textarea 입력 성공!');
               contentEntered = true;
               break;
             }
           }
         }
       } catch (e) {
-        console.log('방법 3 실패:', e);
+        logger.info(`방법 3 실패: ${e}`);
       }
     }
 
     // 방법 4: 모든 contenteditable 요소 시도
     if (!contentEntered) {
-      console.log('\n--- 방법 4: 모든 contenteditable 요소 시도 ---');
+      logger.info('--- 방법 4: 모든 contenteditable 요소 시도 ---');
       try {
         const editables = await page.$$('[contenteditable="true"]');
-        console.log(`contenteditable 요소: ${editables.length}개`);
+        logger.info(`contenteditable 요소: ${editables.length}개`);
 
         for (let i = 0; i < editables.length; i++) {
           const el = editables[i];
           const box = await el.boundingBox();
 
           if (box && box.height > 100 && box.width > 200) {
-            console.log(`요소 ${i} 시도 (크기: ${box.width}x${box.height})`);
+            logger.info(`요소 ${i} 시도 (크기: ${box.width}x${box.height})`);
 
             await page.mouse.click(box.x + 10, box.y + 10);
             await delay(300);
@@ -573,10 +575,10 @@ export async function publishToTistory(params: {
             await delay(300);
 
             const elContent = await el.evaluate((node: Element) => node.textContent || '');
-            console.log(`요소 ${i} 내용:`, elContent.substring(0, 100));
+            logger.info(`요소 ${i} 내용: ${elContent.substring(0, 100)}`);
 
             if (elContent.includes('contenteditable 테스트')) {
-              console.log(`요소 ${i} 입력 성공!`);
+              logger.info(`요소 ${i} 입력 성공!`);
               await page.keyboard.type(plainText.substring(0, 500), { delay: 0 });
               contentEntered = true;
               break;
@@ -584,14 +586,14 @@ export async function publishToTistory(params: {
           }
         }
       } catch (e) {
-        console.log('방법 4 실패:', e);
+        logger.info(`방법 4 실패: ${e}`);
       }
     }
 
     // ========== 본문 입력 결과 확인 ==========
-    console.log('\n========== 본문 입력 결과 ==========');
+    logger.info('========== 본문 입력 결과 ==========');
     await page.screenshot({ path: 'step2-content-final.png', fullPage: true });
-    console.log('Screenshot saved: step2-content-final.png');
+    logger.info('Screenshot saved: step2-content-final.png');
 
     // 최종 에디터 상태 확인
     const finalCheck = await page.evaluate(() => {
@@ -625,37 +627,37 @@ export async function publishToTistory(params: {
       return results.join('\n');
     });
 
-    console.log(finalCheck);
+    logger.info(finalCheck);
 
     if (contentEntered) {
-      console.log('\n✓ 본문 입력 성공!');
+      logger.info('본문 입력 성공!');
     } else {
-      console.log('\n✗ 본문 입력 실패 - 브라우저를 확인하세요');
+      logger.warn('본문 입력 실패 - 브라우저를 확인하세요');
     }
 
     // 태그 입력 (옵션)
     if (tag) {
-      console.log('========== STEP 3: 태그 입력 ==========');
+      logger.info('========== STEP 3: 태그 입력 ==========');
       try {
         const tagSelector = 'input[name="tag"], #tagText, .tag-input';
         const tagInput = await page.$(tagSelector);
         if (tagInput) {
           await page.click(tagSelector);
           await page.type(tagSelector, tag, { delay: 30 });
-          console.log('Tags entered');
+          logger.info('Tags entered');
         }
       } catch {
-        console.log('Tag input not found, skipping...');
+        logger.info('Tag input not found, skipping...');
       }
     }
 
     // 발행 전 최종 스크린샷
     await page.screenshot({ path: 'step3-before-publish.png', fullPage: true });
-    console.log('Screenshot saved: step3-before-publish.png');
+    logger.info('Screenshot saved: step3-before-publish.png');
 
     // 발행 버튼 클릭
     report('발행 버튼 클릭 중...');
-    console.log('========== STEP 4: 발행 버튼 클릭 ==========');
+    logger.info('========== STEP 4: 발행 버튼 클릭 ==========');
     await delay(1000);
 
     // 발행 버튼 찾기
@@ -688,7 +690,7 @@ export async function publishToTistory(params: {
     if (!published) {
       const [publishBtn] = await page.$$('xpath/.//button[contains(text(), "발행") or contains(text(), "저장") or contains(text(), "공개") or contains(text(), "완료")]');
       if (publishBtn) {
-        console.log('Found publish button via XPath');
+        logger.info('Found publish button via XPath');
         await publishBtn.click();
         published = true;
       }
@@ -699,12 +701,12 @@ export async function publishToTistory(params: {
     }
 
     // 발행 설정 레이어 대기
-    console.log('Waiting for publish layer...');
+    logger.info('Waiting for publish layer...');
     await delay(2000);
 
     // 디버깅용 스크린샷
     await page.screenshot({ path: 'tistory-publish-layer.png', fullPage: true });
-    console.log('Publish layer screenshot saved');
+    logger.info('Publish layer screenshot saved');
 
     // 발행 설정 레이어에서 "공개 발행" 버튼 클릭
     let finalPublished = false;
@@ -714,9 +716,9 @@ export async function publishToTistory(params: {
     for (const btn of allButtons) {
       try {
         const text = await btn.evaluate((el: Element) => el.textContent?.trim());
-        console.log(`Button found: "${text}"`);
+        logger.info(`Button found: "${text}"`);
         if (text && text.includes('공개 발행')) {
-          console.log('Clicking 공개 발행 button!');
+          logger.info('Clicking 공개 발행 button!');
           await btn.click();
           finalPublished = true;
           break;
@@ -734,10 +736,10 @@ export async function publishToTistory(params: {
           const isVisible = await btn.isVisible();
           if (isVisible) {
             const text = await btn.evaluate((el: Element) => el.textContent);
-            console.log(`Found button with text: ${text}`);
+            logger.info(`Found button with text: ${text}`);
             // "공개 발행" 버튼 우선 클릭
             if (text && text.includes('공개')) {
-              console.log('Clicking 공개 발행 button');
+              logger.info('Clicking 공개 발행 button');
               await btn.click();
               finalPublished = true;
               break;
@@ -756,7 +758,7 @@ export async function publishToTistory(params: {
         try {
           const text = await btn.evaluate((el: Element) => el.textContent);
           if (text && (text.includes('공개 발행') || text.includes('공개발행'))) {
-            console.log('Found 공개 발행 button via text search');
+            logger.info('Found 공개 발행 button via text search');
             await btn.click();
             finalPublished = true;
             break;
@@ -773,7 +775,7 @@ export async function publishToTistory(params: {
 
     // 발행된 글 URL 확인
     const publishedUrl = page.url();
-    console.log('Post published! URL:', publishedUrl);
+    logger.info(`Post published! URL: ${publishedUrl}`);
 
     await saveCookies(page, userEmail, ownerEmail);
 
@@ -783,7 +785,7 @@ export async function publishToTistory(params: {
     };
 
   } catch (error) {
-    console.error('Error publishing to Tistory:', error);
+    logger.error(`Error publishing to Tistory: ${error}`);
     const errorMessage = error instanceof Error ? error.message : 'Unknown error';
 
     return {

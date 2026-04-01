@@ -13,6 +13,7 @@ import { getUserDataDir, closeExistingBrowser, registerBrowser, unregisterBrowse
 import { getCredential } from './credentialService';
 import { testLogin } from './tistoryAuth';
 import { logError } from './errorLogService';
+import { createLogger } from './processLogService';
 
 let isRefreshing = false;
 
@@ -20,8 +21,10 @@ let isRefreshing = false;
  * 모든 계정의 쿠키를 갱신한다.
  */
 export async function refreshAllCookies(): Promise<void> {
+  const logger = createLogger('cookie');
+
   if (isRefreshing) {
-    console.log('[쿠키갱신] 이미 갱신 작업이 진행 중입니다. 건너뜁니다.');
+    logger.info('[쿠키갱신] 이미 갱신 작업이 진행 중입니다. 건너뜁니다.');
     return;
   }
 
@@ -38,19 +41,19 @@ export async function refreshAllCookies(): Promise<void> {
     });
 
     if (accounts.length === 0) {
-      console.log('[쿠키갱신] 갱신할 계정이 없습니다.');
+      logger.info('[쿠키갱신] 갱신할 계정이 없습니다.');
       return;
     }
 
-    console.log(`[쿠키갱신] ${accounts.length}개 계정 쿠키 갱신 시작`);
+    logger.info(`[쿠키갱신] ${accounts.length}개 계정 쿠키 갱신 시작`);
 
     for (const account of accounts) {
       try {
         await refreshSingleAccount(account.userEmail, account.ownerEmail);
-        console.log(`[쿠키갱신] 성공: ${account.userEmail}`);
+        logger.info(`[쿠키갱신] 성공: ${account.userEmail}`);
       } catch (error) {
         const msg = error instanceof Error ? error.message : String(error);
-        console.error(`[쿠키갱신] 실패: ${account.userEmail} - ${msg}`);
+        logger.error(`[쿠키갱신] 실패: ${account.userEmail} - ${msg}`);
         await logError({
           endpoint: '/scheduler/cookie-refresh',
           method: 'CRON',
@@ -65,9 +68,9 @@ export async function refreshAllCookies(): Promise<void> {
       await delay(2000);
     }
 
-    console.log('[쿠키갱신] 전체 갱신 완료');
+    logger.info('[쿠키갱신] 전체 갱신 완료');
   } catch (error) {
-    console.error('[쿠키갱신] 갱신 중 오류:', error);
+    logger.error(`[쿠키갱신] 갱신 중 오류: ${error}`);
   } finally {
     isRefreshing = false;
   }
@@ -78,6 +81,7 @@ export async function refreshAllCookies(): Promise<void> {
  * 티스토리 관리 페이지에 접속하여 세션 쿠키를 갱신 후 DB에 저장한다.
  */
 async function refreshSingleAccount(userEmail: string, ownerEmail: string): Promise<void> {
+  const logger = createLogger('cookie', undefined, userEmail);
   let browser: Browser | null = null;
   const useBrowserbase = config.browserbase.enabled && process.env.NODE_ENV === 'production';
 
@@ -122,7 +126,7 @@ async function refreshSingleAccount(userEmail: string, ownerEmail: string): Prom
     // 저장된 쿠키 로드
     const loaded = await loadCookies(page, userEmail, ownerEmail);
     if (!loaded) {
-      console.log(`[쿠키갱신] ${userEmail}: 저장된 쿠키 없음, 건너뜀`);
+      logger.info(`[쿠키갱신] ${userEmail}: 저장된 쿠키 없음, 건너뜀`);
       return;
     }
 
@@ -134,12 +138,12 @@ async function refreshSingleAccount(userEmail: string, ownerEmail: string): Prom
     });
 
     const currentUrl = page.url();
-    console.log(`[쿠키갱신] ${userEmail}: 이동 후 URL = ${currentUrl}`);
+    logger.info(`[쿠키갱신] ${userEmail}: 이동 후 URL = ${currentUrl}`);
 
     // 로그인 페이지로 리다이렉트됐으면 쿠키가 이미 만료된 것
     const isLoginPage = currentUrl.includes('login') || currentUrl.includes('auth') || currentUrl.includes('kakao');
     if (isLoginPage) {
-      console.warn(`[쿠키갱신] ${userEmail}: 세션 만료됨, 자동 재로그인 시도`);
+      logger.warn(`[쿠키갱신] ${userEmail}: 세션 만료됨, 자동 재로그인 시도`);
 
       // 저장된 자격증명 조회
       const credential = await getCredential(userEmail, ownerEmail);
@@ -180,7 +184,7 @@ async function refreshSingleAccount(userEmail: string, ownerEmail: string): Prom
           throw new Error('재로그인 후에도 세션 무효 (2FA 미완료 가능성)');
         }
 
-        console.log(`[쿠키갱신] ${userEmail}: 자동 재로그인 성공 (검증 완료)`);
+        logger.info(`[쿠키갱신] ${userEmail}: 자동 재로그인 성공 (검증 완료)`);
       } finally {
         if (verifyBrowser) {
           await verifyBrowser.close().catch(() => {});
@@ -192,7 +196,7 @@ async function refreshSingleAccount(userEmail: string, ownerEmail: string): Prom
     // 관리 페이지 접근 성공 → 갱신된 쿠키 저장
     const saved = await saveCookies(page, userEmail, ownerEmail);
     if (saved) {
-      console.log(`[쿠키갱신] ${userEmail}: 쿠키 갱신 저장 완료`);
+      logger.info(`[쿠키갱신] ${userEmail}: 쿠키 갱신 저장 완료`);
     }
   } finally {
     if (browser) {

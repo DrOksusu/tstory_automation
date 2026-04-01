@@ -8,6 +8,7 @@ import { connectToBrowserbase, getOrCreateContext } from './browserbaseConnector
 import { delay } from './tistoryUtils';
 import { LoginSession } from '../types';
 import { getUserDataDir, closeExistingBrowser, registerBrowser, unregisterBrowser } from '../utils/browserProfile';
+import { createLogger, ProcessLogger } from './processLogService';
 
 // 활성 로그인 세션 저장소
 const loginSessions = new Map<string, LoginSession>();
@@ -22,12 +23,13 @@ function generateSessionId(): string {
 /**
  * 로그인 상태 확인 (더 정확한 체크)
  */
-export async function isLoggedIn(page: Page, blogName?: string): Promise<boolean> {
+export async function isLoggedIn(page: Page, blogName?: string, logger?: ProcessLogger): Promise<boolean> {
+  const log = logger || createLogger('auth');
   try {
     const targetBlog = blogName || config.tistory.blogName;
     // 글쓰기 페이지로 직접 이동 시도 (더 정확한 체크)
     const writeUrl = `https://${targetBlog}.tistory.com/manage/newpost`;
-    console.log(`isLoggedIn check - navigating to: ${writeUrl}`);
+    log.info(`isLoggedIn check - navigating to: ${writeUrl}`);
 
     await page.goto(writeUrl, {
       waitUntil: 'networkidle2',
@@ -35,12 +37,12 @@ export async function isLoggedIn(page: Page, blogName?: string): Promise<boolean
     });
 
     const url = page.url();
-    console.log(`isLoggedIn check - Current URL: ${url}`);
+    log.info(`isLoggedIn check - Current URL: ${url}`);
 
     // 로그인 페이지로 리디렉션되면 로그인 안됨
     const isLoginPage = url.includes('login') || url.includes('auth') || url.includes('kakao');
     if (isLoginPage) {
-      console.log('Not logged in - redirected to login page');
+      log.info('Not logged in - redirected to login page');
       return false;
     }
 
@@ -49,21 +51,21 @@ export async function isLoggedIn(page: Page, blogName?: string): Promise<boolean
     const isManagePage = url.includes('/manage');
 
     if (isWritePage || isManagePage) {
-      console.log('Logged in successfully - on manage/write page');
+      log.info('Logged in successfully - on manage/write page');
       return true;
     }
 
     // 블로그 홈으로 리다이렉트되면 쿠키는 있지만 세션이 만료됨
     if (url === `https://${targetBlog}.tistory.com/` ||
         url === `https://${targetBlog}.tistory.com`) {
-      console.log('Cookie exists but session expired - redirected to blog home');
+      log.info('Cookie exists but session expired - redirected to blog home');
       return false;
     }
 
-    console.log('Login status unclear, assuming not logged in');
+    log.info('Login status unclear, assuming not logged in');
     return false;
   } catch (error) {
-    console.error('isLoggedIn check failed:', error);
+    log.error(`isLoggedIn check failed: ${error}`);
     return false;
   }
 }
@@ -75,8 +77,9 @@ export async function loginToTistory(page: Page, credentials?: { email: string; 
   // 인자로 받은 credentials가 없으면 config에서 가져옴
   const email = credentials?.email || config.kakao.email;
   const password = credentials?.password || config.kakao.password;
+  const logger = createLogger('auth', undefined, ownerEmail || email);
   try {
-    console.log('Navigating to Tistory login page...');
+    logger.info('Navigating to Tistory login page...');
 
     // 티스토리 로그인 페이지로 이동
     await page.goto('https://www.tistory.com/auth/login', {
@@ -87,7 +90,7 @@ export async function loginToTistory(page: Page, credentials?: { email: string; 
     await delay(2000);
 
     // 카카오 로그인 버튼 찾기 (여러 선택자 시도)
-    console.log('Looking for Kakao login button...');
+    logger.info('Looking for Kakao login button...');
     const kakaoButtonSelectors = [
       '.btn_login.link_kakao_id',
       'a[href*="kakao"]',
@@ -101,7 +104,7 @@ export async function loginToTistory(page: Page, credentials?: { email: string; 
       try {
         const btn = await page.$(selector);
         if (btn) {
-          console.log(`Found Kakao button: ${selector}`);
+          logger.info(`Found Kakao button: ${selector}`);
           await btn.click();
           kakaoButtonClicked = true;
           break;
@@ -113,7 +116,7 @@ export async function loginToTistory(page: Page, credentials?: { email: string; 
 
     // XPath로 시도
     if (!kakaoButtonClicked) {
-      console.log('Trying XPath for Kakao button...');
+      logger.info('Trying XPath for Kakao button...');
       const [kakaoBtn] = await page.$$('xpath/.//a[contains(text(), "카카오") or contains(@class, "kakao")]');
       if (kakaoBtn) {
         await kakaoBtn.click();
@@ -127,20 +130,20 @@ export async function loginToTistory(page: Page, credentials?: { email: string; 
     }
 
     // 카카오 로그인 페이지 대기
-    console.log('Waiting for Kakao login page...');
+    logger.info('Waiting for Kakao login page...');
     await delay(3000);
     await page.waitForNavigation({ waitUntil: 'domcontentloaded', timeout: 15000 }).catch(() => {
-      console.log('Navigation timeout, continuing...');
+      logger.info('Navigation timeout, continuing...');
     });
 
     await delay(2000);
 
     // 현재 URL 로그
     const kakaoUrl = page.url();
-    console.log(`Kakao page URL: ${kakaoUrl}`);
+    logger.info(`Kakao page URL: ${kakaoUrl}`);
 
     // 이메일 입력 - 셀렉터를 waitForSelector로 확실히 대기
-    console.log('Entering Kakao credentials...');
+    logger.info('Entering Kakao credentials...');
     const emailSelectors = [
       'input[name="loginId"]',
       'input[id="loginId--1"]',
@@ -158,14 +161,14 @@ export async function loginToTistory(page: Page, credentials?: { email: string; 
     for (const selector of emailSelectors) {
       try {
         await page.waitForSelector(selector, { timeout: 3000 });
-        console.log(`Email selector found via waitForSelector: ${selector}`);
+        logger.info(`Email selector found via waitForSelector: ${selector}`);
         const input = await page.$(selector);
         if (input) {
           await input.click();
           await delay(300);
           await input.type(email, { delay: 50 });
           emailEntered = true;
-          console.log(`Email entered using: ${selector}`);
+          logger.info(`Email entered using: ${selector}`);
           break;
         }
       } catch {
@@ -175,7 +178,7 @@ export async function loginToTistory(page: Page, credentials?: { email: string; 
 
     // 셀렉터로 못 찾으면 페이지 DOM 분석 후 재시도
     if (!emailEntered) {
-      console.log('Email selectors failed, analyzing page DOM...');
+      logger.info('Email selectors failed, analyzing page DOM...');
       const pageInfo = await page.evaluate(() => {
         const inputs = document.querySelectorAll('input');
         return Array.from(inputs).map((input, i) => ({
@@ -188,7 +191,7 @@ export async function loginToTistory(page: Page, credentials?: { email: string; 
           visible: input.offsetHeight > 0,
         }));
       });
-      console.log('Page inputs:', JSON.stringify(pageInfo));
+      logger.info(`Page inputs: ${JSON.stringify(pageInfo)}`);
 
       // visible text/email input 찾기
       const textInput = pageInfo.find(
@@ -200,7 +203,7 @@ export async function loginToTistory(page: Page, credentials?: { email: string; 
           : textInput.name
             ? `input[name="${textInput.name}"]`
             : `input:nth-of-type(${textInput.index + 1})`;
-        console.log(`Trying fallback selector: ${selector}`);
+        logger.info(`Trying fallback selector: ${selector}`);
         try {
           const input = await page.$(selector);
           if (input) {
@@ -208,10 +211,10 @@ export async function loginToTistory(page: Page, credentials?: { email: string; 
             await delay(300);
             await input.type(email, { delay: 50 });
             emailEntered = true;
-            console.log(`Email entered using fallback: ${selector}`);
+            logger.info(`Email entered using fallback: ${selector}`);
           }
         } catch (e) {
-          console.log('Fallback selector failed:', e);
+          logger.info(`Fallback selector failed: ${e}`);
         }
       }
     }
@@ -230,7 +233,7 @@ export async function loginToTistory(page: Page, credentials?: { email: string; 
         if (input) {
           await input.click();
           await input.type(password, { delay: 50 });
-          console.log(`Password entered using: ${selector}`);
+          logger.info(`Password entered using: ${selector}`);
           break;
         }
       } catch {
@@ -239,7 +242,7 @@ export async function loginToTistory(page: Page, credentials?: { email: string; 
     }
 
     // 로그인 버튼 클릭
-    console.log('Clicking login submit button...');
+    logger.info('Clicking login submit button...');
     await delay(500);
     const submitSelectors = ['button[type="submit"]', 'button.submit', 'input[type="submit"]', 'button[class*="login"]'];
 
@@ -248,7 +251,7 @@ export async function loginToTistory(page: Page, credentials?: { email: string; 
         const btn = await page.$(selector);
         if (btn) {
           await btn.click();
-          console.log(`Submit clicked using: ${selector}`);
+          logger.info(`Submit clicked using: ${selector}`);
           break;
         }
       } catch {
@@ -257,27 +260,27 @@ export async function loginToTistory(page: Page, credentials?: { email: string; 
     }
 
     // 로그인 완료 대기
-    console.log('Waiting for login to complete...');
+    logger.info('Waiting for login to complete...');
     await delay(3000);
     await page.waitForNavigation({ waitUntil: 'networkidle2', timeout: 30000 }).catch(() => {
-      console.log('Navigation timeout after login, continuing...');
+      logger.info('Navigation timeout after login, continuing...');
     });
 
     await delay(2000);
 
     // 로그인 성공 확인
     const currentUrl = page.url();
-    console.log(`Current URL after login: ${currentUrl}`);
+    logger.info(`Current URL after login: ${currentUrl}`);
 
     if (currentUrl.includes('tistory.com') && !currentUrl.includes('login')) {
-      console.log('Login successful!');
+      logger.info('Login successful!');
       await saveCookies(page, email, ownerEmail);
       return true;
     }
 
     // 카카오 OAuth "계속하기" 버튼 처리
     if (currentUrl.includes('kauth.kakao.com') || currentUrl.includes('accounts.kakao.com')) {
-      console.log('Kakao OAuth consent screen detected, clicking continue button...');
+      logger.info('Kakao OAuth consent screen detected, clicking continue button...');
 
       // "계속하기" 노란 버튼 클릭 (여러 선택자 시도)
       const continueSelectors = [
@@ -291,7 +294,7 @@ export async function loginToTistory(page: Page, credentials?: { email: string; 
         try {
           const btn = await page.$(selector);
           if (btn) {
-            console.log(`Clicking continue button: ${selector}`);
+            logger.info(`Clicking continue button: ${selector}`);
             await btn.click();
             await delay(2000);
             await page.waitForNavigation({ waitUntil: 'networkidle2', timeout: 15000 }).catch(() => {});
@@ -305,8 +308,8 @@ export async function loginToTistory(page: Page, credentials?: { email: string; 
       // 계속하기 버튼 클릭 후에도 여전히 카카오 페이지면 2FA 대기
       const afterContinueUrl = page.url();
       if (afterContinueUrl.includes('kauth.kakao.com') || afterContinueUrl.includes('accounts.kakao.com')) {
-        console.log('Still on Kakao page after continue button - 2FA may be required');
-        console.log('Waiting up to 120 seconds for user to complete 2FA...');
+        logger.info('Still on Kakao page after continue button - 2FA may be required');
+        logger.info('Waiting up to 120 seconds for user to complete 2FA...');
 
         for (let remaining = 120; remaining > 0; remaining -= 2) {
           onProgress?.(`2FA_REQUIRED|${remaining}`);
@@ -317,13 +320,13 @@ export async function loginToTistory(page: Page, credentials?: { email: string; 
           // 티스토리로 리다이렉트 완료 (OAuth 콜백 /auth/login?code= 제외)
           if (checkUrl.includes('tistory.com') && !checkUrl.includes('/auth/login')) {
             // URL만으로 부족 — 실제 로그인 상태 재검증
-            const verified = await isLoggedIn(page);
+            const verified = await isLoggedIn(page, undefined, logger);
             if (verified) {
-              console.log('2FA completed successfully! (verified)');
+              logger.info('2FA completed successfully! (verified)');
               await saveCookies(page, email, ownerEmail);
               return true;
             }
-            console.warn('2FA: tistory.com 리다이렉트 감지됐으나 세션 무효 — 대기 계속');
+            logger.warn('2FA: tistory.com 리다이렉트 감지됐으나 세션 무효 — 대기 계속');
           }
 
           // 2FA 완료 후 카카오 OAuth 동의("계속하기") 페이지가 다시 나타날 수 있음
@@ -336,21 +339,21 @@ export async function loginToTistory(page: Page, credentials?: { email: string; 
                   return rect.height > 0 && rect.width > 0;
                 });
                 if (isVisible) {
-                  console.log('2FA 후 "계속하기" 버튼 발견, 클릭...');
+                  logger.info('2FA 후 "계속하기" 버튼 발견, 클릭...');
                   await continueBtn.click();
                   await delay(3000);
                   await page.waitForNavigation({ waitUntil: 'networkidle2', timeout: 10000 }).catch(() => {});
 
                   const afterClickUrl = page.url();
-                  console.log(`계속하기 클릭 후 URL: ${afterClickUrl}`);
+                  logger.info(`계속하기 클릭 후 URL: ${afterClickUrl}`);
                   if (afterClickUrl.includes('tistory.com') && !afterClickUrl.includes('/auth/login')) {
-                    const verified = await isLoggedIn(page);
+                    const verified = await isLoggedIn(page, undefined, logger);
                     if (verified) {
-                      console.log('2FA + 계속하기 후 로그인 성공! (verified)');
+                      logger.info('2FA + 계속하기 후 로그인 성공! (verified)');
                       await saveCookies(page, email, ownerEmail);
                       return true;
                     }
-                    console.warn('2FA + 계속하기: tistory.com 도달했으나 세션 무효');
+                    logger.warn('2FA + 계속하기: tistory.com 도달했으나 세션 무효');
                   }
                 }
               }
@@ -360,29 +363,29 @@ export async function loginToTistory(page: Page, credentials?: { email: string; 
           }
         }
 
-        console.log('2FA wait timeout (120s)');
+        logger.info('2FA wait timeout (120s)');
         await page.screenshot({ path: 'tistory-2fa-timeout.png', fullPage: true });
         return false;
       }
     }
 
     const finalUrl = page.url();
-    console.log(`Final URL: ${finalUrl}`);
+    logger.info(`Final URL: ${finalUrl}`);
 
     if (finalUrl.includes('tistory.com') && !finalUrl.includes('/auth/login')) {
-      const verified = await isLoggedIn(page);
+      const verified = await isLoggedIn(page, undefined, logger);
       if (verified) {
         await saveCookies(page, email, ownerEmail);
         return true;
       }
-      console.warn(`Final URL은 tistory.com이지만 세션 무효: ${finalUrl}`);
+      logger.warn(`Final URL은 tistory.com이지만 세션 무효: ${finalUrl}`);
     }
 
     await page.screenshot({ path: 'tistory-login-final-error.png', fullPage: true });
-    console.log('Login may have failed, check screenshot');
+    logger.info('Login may have failed, check screenshot');
     return false;
   } catch (error) {
-    console.error('Login failed:', error);
+    logger.error(`Login failed: ${error}`);
     await page.screenshot({ path: 'tistory-login-exception.png', fullPage: true }).catch(() => {});
     return false;
   }
@@ -394,19 +397,19 @@ export async function loginToTistory(page: Page, credentials?: { email: string; 
 export async function testLogin(credentials?: { email: string; password: string }, ownerEmail?: string): Promise<{ success: boolean; message: string; userEmail?: string }> {
   let browser: Browser | null = null;
   let useBrowserbase = false;
+  const logger = createLogger('auth', undefined, ownerEmail || credentials?.email);
 
   try {
     if (!credentials?.email) {
       return { success: false, message: '이메일이 필요합니다.' };
     }
-
-    console.log(`[testLogin] Starting login for: ${credentials.email}`);
+    logger.info(`[testLogin] Starting login for: ${credentials.email}`);
 
     // Browserbase 사용 여부 확인
     useBrowserbase = config.browserbase.enabled;
 
     if (useBrowserbase) {
-      console.log('[testLogin] Connecting to Browserbase for auto login...');
+      logger.info('[testLogin] Connecting to Browserbase for auto login...');
       // Context를 통해 세션 간 쿠키/localStorage 유지
       const contextId = (credentials.email && ownerEmail)
         ? await getOrCreateContext(credentials.email, ownerEmail)
@@ -415,7 +418,7 @@ export async function testLogin(credentials?: { email: string; password: string 
       browser = connectedBrowser;
     } else {
       // 로컬 Puppeteer - headless 모드로 실행 (자동 로그인은 화면 불필요)
-      console.log('[testLogin] Launching local Puppeteer (headless)...');
+      logger.info('[testLogin] Launching local Puppeteer (headless)...');
       const profileDir = getUserDataDir(credentials.email);
       await closeExistingBrowser(profileDir);
       browser = await puppeteer.launch({
@@ -431,24 +434,24 @@ export async function testLogin(credentials?: { email: string; password: string 
 
     await loadCookies(page, credentials.email, ownerEmail);
 
-    const loggedIn = await isLoggedIn(page);
-    console.log(`[testLogin] Already logged in: ${loggedIn}`);
+    const loggedIn = await isLoggedIn(page, undefined, logger);
+    logger.info(`[testLogin] Already logged in: ${loggedIn}`);
 
     if (loggedIn) {
       // 이미 로그인된 경우에도 쿠키 갱신
       const cookiesSaved = await saveCookies(page, credentials.email, ownerEmail);
-      console.log(`[testLogin] Cookies refreshed: ${cookiesSaved}`);
+      logger.info(`[testLogin] Cookies refreshed: ${cookiesSaved}`);
       return { success: true, message: '이미 로그인되어 있습니다 (쿠키 유효)', userEmail: credentials.email };
     }
 
-    console.log('[testLogin] Attempting login...');
+    logger.info('[testLogin] Attempting login...');
     const loginSuccess = await loginToTistory(page, credentials, ownerEmail);
-    console.log(`[testLogin] Login result: ${loginSuccess}`);
+    logger.info(`[testLogin] Login result: ${loginSuccess}`);
 
     if (loginSuccess) {
       // 로그인 성공 시 쿠키 저장
       const cookiesSaved = await saveCookies(page, credentials.email, ownerEmail);
-      console.log(`[testLogin] Cookies saved after login: ${cookiesSaved}`);
+      logger.info(`[testLogin] Cookies saved after login: ${cookiesSaved}`);
 
       if (!cookiesSaved) {
         return { success: false, message: '로그인은 성공했으나 쿠키 저장에 실패했습니다.' };
@@ -460,11 +463,11 @@ export async function testLogin(credentials?: { email: string; password: string 
     }
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-    console.error(`[testLogin] Error: ${errorMessage}`);
+    logger.error(`[testLogin] Error: ${errorMessage}`);
     return { success: false, message: errorMessage };
   } finally {
     if (browser) {
-      console.log('[testLogin] Closing browser...');
+      logger.info('[testLogin] Closing browser...');
       const profileDir = getUserDataDir(credentials?.email);
       await browser.close();
       unregisterBrowser(profileDir);
@@ -478,10 +481,11 @@ export async function testLogin(credentials?: { email: string; password: string 
 export async function manualLogin(): Promise<{ success: boolean; message: string }> {
   let browser: Browser | null = null;
 
+  const logger = createLogger('auth');
   try {
-    console.log('Opening browser for manual login...');
-    console.log('Please complete the login (including 2FA) in the browser window.');
-    console.log('The browser will close automatically after login is detected.');
+    logger.info('Opening browser for manual login...');
+    logger.info('Please complete the login (including 2FA) in the browser window.');
+    logger.info('The browser will close automatically after login is detected.');
 
     const profileDir = getUserDataDir();
     await closeExistingBrowser(profileDir);
@@ -512,14 +516,14 @@ export async function manualLogin(): Promise<{ success: boolean; message: string
     );
 
     // 티스토리 로그인 페이지로 이동
-    console.log('Opening Tistory login page...');
+    logger.info('Opening Tistory login page...');
     await page.goto('https://www.tistory.com/auth/login', {
       waitUntil: 'networkidle2',
       timeout: 30000,
     });
 
-    console.log('Waiting for login to complete...');
-    console.log('(Please login manually in the browser window - use Kakao login)');
+    logger.info('Waiting for login to complete...');
+    logger.info('(Please login manually in the browser window - use Kakao login)');
 
     // 로그인 완료 대기 (최대 2분)
     let loginDetected = false;
@@ -529,7 +533,7 @@ export async function manualLogin(): Promise<{ success: boolean; message: string
     while (!loginDetected && (Date.now() - startTime) < maxWaitTime) {
       await delay(3000);
       const currentUrl = page.url();
-      console.log(`Current URL: ${currentUrl}`);
+      logger.info(`Current URL: ${currentUrl}`);
 
       // 에러 페이지 제외하고, 티스토리 관리 페이지나 메인 페이지로 이동하면 로그인 성공
       const isLoggedIn = currentUrl.includes('tistory.com') &&
@@ -540,18 +544,18 @@ export async function manualLogin(): Promise<{ success: boolean; message: string
 
       if (isLoggedIn) {
         loginDetected = true;
-        console.log('Login detected!');
+        logger.info('Login detected!');
         break;
       }
     }
 
     if (loginDetected) {
       // 현재 페이지에서 쿠키 저장
-      console.log('Saving cookies from current page...');
+      logger.info('Saving cookies from current page...');
       await saveCookies(page);
 
       // 블로그 페이지로 이동해서 추가 쿠키 획득
-      console.log('Navigating to blog page...');
+      logger.info('Navigating to blog page...');
       try {
         await page.goto(`https://${config.tistory.blogName}.tistory.com`, {
           waitUntil: 'domcontentloaded',
@@ -559,9 +563,9 @@ export async function manualLogin(): Promise<{ success: boolean; message: string
         });
         await delay(2000);
         await saveCookies(page);
-        console.log('Cookies saved from blog page');
+        logger.info('Cookies saved from blog page');
       } catch (e) {
-        console.log('Blog page navigation skipped');
+        logger.info('Blog page navigation skipped');
       }
 
       return { success: true, message: '로그인 성공! 쿠키가 저장되었습니다.' };
@@ -573,7 +577,7 @@ export async function manualLogin(): Promise<{ success: boolean; message: string
     return { success: false, message: errorMessage };
   } finally {
     if (browser) {
-      console.log('Closing browser...');
+      logger.info('Closing browser...');
       const profileDir = getUserDataDir();
       await browser.close();
       unregisterBrowser(profileDir);
@@ -587,13 +591,14 @@ export async function manualLogin(): Promise<{ success: boolean; message: string
  */
 export async function startManualLogin(userEmail?: string, ownerEmail?: string): Promise<{ sessionId: string; liveViewUrl?: string }> {
   // 기존 세션들 모두 취소
-  console.log(`Cancelling ${loginSessions.size} existing login sessions...`);
+  const logger = createLogger('auth', undefined, ownerEmail || userEmail);
+  logger.info(`Cancelling ${loginSessions.size} existing login sessions...`);
   for (const [existingSessionId, existingSession] of loginSessions.entries()) {
     if (existingSession.browser) {
       try {
         existingSession.browser.disconnect();
       } catch (e) {
-        console.log(`Failed to disconnect session ${existingSessionId}:`, e);
+        logger.info(`Failed to disconnect session ${existingSessionId}: ${e}`);
       }
     }
     loginSessions.delete(existingSessionId);
@@ -616,19 +621,19 @@ export async function startManualLogin(userEmail?: string, ownerEmail?: string):
   // Browserbase 사용 여부 확인
   const useBrowserbase = config.browserbase.enabled;
 
-  console.log(`[${sessionId}] Browserbase config:`, {
+  logger.info(`[${sessionId}] Browserbase config: ${JSON.stringify({
     enabled: config.browserbase.enabled,
     hasApiKey: !!config.browserbase.apiKey,
     hasProjectId: !!config.browserbase.projectId,
     apiKeyPrefix: config.browserbase.apiKey?.substring(0, 10) + '...',
-  });
+  })}`);
 
   if (useBrowserbase) {
-    console.log(`[${sessionId}] Using Browserbase for login...`);
+    logger.info(`[${sessionId}] Using Browserbase for login...`);
 
     // 백그라운드에서 Browserbase 로그인 프로세스 실행
     runBrowserbaseLoginProcess(sessionId).catch((error) => {
-      console.error(`Login process error for session ${sessionId}:`, error);
+      logger.error(`Login process error for session ${sessionId}: ${error}`);
       const session = loginSessions.get(sessionId);
       if (session) {
         session.status = 'failed';
@@ -656,10 +661,10 @@ export async function startManualLogin(userEmail?: string, ownerEmail?: string):
     };
   } else {
     // 로컬 Puppeteer 사용 (로컬에서만 로그인 가능)
-    console.log(`[${sessionId}] Using local Puppeteer for login...`);
+    logger.info(`[${sessionId}] Using local Puppeteer for login...`);
 
     runLoginProcess(sessionId).catch((error) => {
-      console.error(`Login process error for session ${sessionId}:`, error);
+      logger.error(`Login process error for session ${sessionId}: ${error}`);
       const session = loginSessions.get(sessionId);
       if (session) {
         session.status = 'failed';
@@ -706,7 +711,8 @@ export async function cancelLogin(sessionId: string): Promise<boolean> {
     try {
       await session.browser.close();
     } catch (e) {
-      console.error('Error closing browser:', e);
+      const cancelLogger = createLogger('auth');
+      cancelLogger.error(`Error closing browser: ${e}`);
     }
   }
 
@@ -721,10 +727,11 @@ async function runLoginProcess(sessionId: string): Promise<void> {
   const session = loginSessions.get(sessionId);
   if (!session) return;
 
+  const logger = createLogger('auth', undefined, session.ownerEmail || session.userEmail);
   let browser: Browser | null = null;
 
   try {
-    console.log(`[${sessionId}] Opening browser for manual login...`);
+    logger.info(`[${sessionId}] Opening browser for manual login...`);
     session.status = 'in_progress';
     session.message = '브라우저를 여는 중...';
 
@@ -756,7 +763,7 @@ async function runLoginProcess(sessionId: string): Promise<void> {
       'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
     );
 
-    console.log(`[${sessionId}] Opening Tistory login page...`);
+    logger.info(`[${sessionId}] Opening Tistory login page...`);
     session.message = '티스토리 로그인 페이지로 이동 중...';
 
     await page.goto('https://www.tistory.com/auth/login', {
@@ -765,7 +772,7 @@ async function runLoginProcess(sessionId: string): Promise<void> {
     });
 
     session.message = '카카오 로그인을 완료해주세요...';
-    console.log(`[${sessionId}] Waiting for login to complete...`);
+    logger.info(`[${sessionId}] Waiting for login to complete...`);
 
     // 로그인 완료 대기 (최대 3분)
     let loginDetected = false;
@@ -775,7 +782,7 @@ async function runLoginProcess(sessionId: string): Promise<void> {
     while (!loginDetected && (Date.now() - startTime) < maxWaitTime) {
       // 세션이 취소되었는지 확인
       if (!loginSessions.has(sessionId)) {
-        console.log(`[${sessionId}] Session cancelled`);
+        logger.info(`[${sessionId}] Session cancelled`);
         return;
       }
 
@@ -783,7 +790,7 @@ async function runLoginProcess(sessionId: string): Promise<void> {
 
       try {
         const currentUrl = page.url();
-        console.log(`[${sessionId}] Current URL: ${currentUrl}`);
+        logger.info(`[${sessionId}] Current URL: ${currentUrl}`);
 
         // 로그인 성공 조건 확인 (더 유연하게)
         const isTistoryMainPage = currentUrl === 'https://www.tistory.com/' ||
@@ -799,22 +806,22 @@ async function runLoginProcess(sessionId: string): Promise<void> {
         // 로그인 페이지가 아니고 티스토리 페이지에 있으면 로그인 성공
         if ((isTistoryMainPage || isBlogPage || isManagePage) && !isOnKakaoLogin && !isOnTistoryLogin) {
           loginDetected = true;
-          console.log(`[${sessionId}] Login detected!`);
+          logger.info(`[${sessionId}] Login detected!`);
           break;
         }
       } catch (e) {
         // 페이지가 닫혔을 수 있음
-        console.log(`[${sessionId}] Page check error:`, e);
+        logger.info(`[${sessionId}] Page check error: ${e}`);
       }
     }
 
     if (loginDetected) {
       session.message = '쿠키 저장 중...';
-      console.log(`[${sessionId}] Saving cookies for user: ${session.userEmail}...`);
+      logger.info(`[${sessionId}] Saving cookies for user: ${session.userEmail}...`);
 
       if (session.userEmail) {
         const saved = await saveCookies(page, session.userEmail, session.ownerEmail);
-        console.log(`[${sessionId}] First cookie save result: ${saved}`);
+        logger.info(`[${sessionId}] First cookie save result: ${saved}`);
 
         // 블로그 페이지로 이동해서 추가 쿠키 획득
         try {
@@ -824,14 +831,14 @@ async function runLoginProcess(sessionId: string): Promise<void> {
           });
           await delay(2000);
           const saved2 = await saveCookies(page, session.userEmail, session.ownerEmail);
-          console.log(`[${sessionId}] Second cookie save result: ${saved2}`);
+          logger.info(`[${sessionId}] Second cookie save result: ${saved2}`);
         } catch (e) {
-          console.log(`[${sessionId}] Blog page navigation skipped:`, e);
+          logger.info(`[${sessionId}] Blog page navigation skipped: ${e}`);
         }
 
         // 저장 확인
         const accounts = await getAllAccounts(session.ownerEmail);
-        console.log(`[${sessionId}] Accounts after save:`, accounts.map(a => a.userEmail));
+        logger.info(`[${sessionId}] Accounts after save: ${accounts.map(a => a.userEmail)}`);
 
         if (accounts.some(a => a.userEmail === session.userEmail)) {
           session.status = 'success';
@@ -839,12 +846,12 @@ async function runLoginProcess(sessionId: string): Promise<void> {
         } else {
           session.status = 'failed';
           session.message = '쿠키 저장에 실패했습니다. 다시 시도해주세요.';
-          console.error(`[${sessionId}] Cookie save verification failed!`);
+          logger.error(`[${sessionId}] Cookie save verification failed!`);
         }
       } else {
         session.status = 'failed';
         session.message = '이메일 정보가 없어 쿠키를 저장할 수 없습니다.';
-        console.error(`[${sessionId}] No userEmail in session!`);
+        logger.error(`[${sessionId}] No userEmail in session!`);
       }
     } else {
       session.status = 'timeout';
@@ -852,17 +859,17 @@ async function runLoginProcess(sessionId: string): Promise<void> {
     }
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-    console.error(`[${sessionId}] Login error:`, errorMessage);
+    logger.error(`[${sessionId}] Login error: ${errorMessage}`);
     session.status = 'failed';
     session.message = errorMessage;
   } finally {
     if (browser) {
-      console.log(`[${sessionId}] Closing browser...`);
+      logger.info(`[${sessionId}] Closing browser...`);
       const profileDir = getUserDataDir(session.userEmail);
       try {
         await browser.close();
       } catch (e) {
-        console.error(`[${sessionId}] Error closing browser:`, e);
+        logger.error(`[${sessionId}] Error closing browser: ${e}`);
       }
       unregisterBrowser(profileDir);
     }
@@ -882,10 +889,11 @@ async function runBrowserbaseLoginProcess(sessionId: string): Promise<void> {
   const session = loginSessions.get(sessionId);
   if (!session) return;
 
+  const logger = createLogger('auth', undefined, session.ownerEmail || session.userEmail);
   let browser: Browser | null = null;
 
   try {
-    console.log(`[${sessionId}] Connecting to Browserbase...`);
+    logger.info(`[${sessionId}] Connecting to Browserbase...`);
     session.status = 'in_progress';
     session.message = 'Browserbase에 연결 중...';
 
@@ -901,7 +909,7 @@ async function runBrowserbaseLoginProcess(sessionId: string): Promise<void> {
     session.liveViewUrl = liveViewUrl;
     session.browserbaseSessionId = bbSessionId;
 
-    console.log(`[${sessionId}] Live view URL: ${liveViewUrl}`);
+    logger.info(`[${sessionId}] Live view URL: ${liveViewUrl}`);
 
     const pages = await browser.pages();
     const page = pages.length > 0 ? pages[0] : await browser.newPage();
@@ -914,7 +922,7 @@ async function runBrowserbaseLoginProcess(sessionId: string): Promise<void> {
     await page.setViewport({ width: 1280, height: 720 });
 
     // 티스토리 로그인 페이지로 바로 이동 (타임아웃 여유 확보)
-    console.log(`[${sessionId}] Opening Tistory login page...`);
+    logger.info(`[${sessionId}] Opening Tistory login page...`);
     session.message = '티스토리 로그인 페이지로 이동 중...';
 
     await page.goto('https://www.tistory.com/auth/login', {
@@ -924,7 +932,7 @@ async function runBrowserbaseLoginProcess(sessionId: string): Promise<void> {
     await delay(2000);
 
     session.message = '라이브 뷰에서 카카오 로그인을 완료해주세요...';
-    console.log(`[${sessionId}] Waiting for user to complete login in live view...`);
+    logger.info(`[${sessionId}] Waiting for user to complete login in live view...`);
 
     // 로그인 완료 대기 (최대 3분)
     let loginDetected = false;
@@ -934,7 +942,7 @@ async function runBrowserbaseLoginProcess(sessionId: string): Promise<void> {
     while (!loginDetected && (Date.now() - startTime) < maxWaitTime) {
       // 세션이 취소되었는지 확인
       if (!loginSessions.has(sessionId)) {
-        console.log(`[${sessionId}] Session cancelled`);
+        logger.info(`[${sessionId}] Session cancelled`);
         return;
       }
 
@@ -942,7 +950,7 @@ async function runBrowserbaseLoginProcess(sessionId: string): Promise<void> {
 
       try {
         const currentUrl = page.url();
-        console.log(`[${sessionId}] Current URL: ${currentUrl}`);
+        logger.info(`[${sessionId}] Current URL: ${currentUrl}`);
 
         // 로그인 성공 조건 확인 (더 유연하게)
         // 1. 티스토리 메인 페이지
@@ -959,7 +967,7 @@ async function runBrowserbaseLoginProcess(sessionId: string): Promise<void> {
         const isOnKakaoLogin = currentUrl.includes('accounts.kakao.com');
         const isOnTistoryLogin = currentUrl.includes('tistory.com/auth/login');
 
-        console.log(`[${sessionId}] Check - isTistoryMain: ${isTistoryMainPage}, isBlog: ${isBlogPage}, isManage: ${isManagePage}, isKakao: ${isOnKakaoLogin}, isTistoryLogin: ${isOnTistoryLogin}`);
+        logger.info(`[${sessionId}] Check - isTistoryMain: ${isTistoryMainPage}, isBlog: ${isBlogPage}, isManage: ${isManagePage}, isKakao: ${isOnKakaoLogin}, isTistoryLogin: ${isOnTistoryLogin}`);
 
         // 로그인 페이지가 아니고 티스토리 페이지에 있으면 로그인 성공
         if ((isTistoryMainPage || isBlogPage || isManagePage) && !isOnKakaoLogin && !isOnTistoryLogin) {
@@ -972,11 +980,11 @@ async function runBrowserbaseLoginProcess(sessionId: string): Promise<void> {
             return !!(logoutBtn || profileArea || manageBtn);
           }).catch(() => false);
 
-          console.log(`[${sessionId}] Has logged in indicator: ${hasLoggedInIndicator}`);
+          logger.info(`[${sessionId}] Has logged in indicator: ${hasLoggedInIndicator}`);
 
           if (hasLoggedInIndicator || isManagePage) {
             loginDetected = true;
-            console.log(`[${sessionId}] Login detected!`);
+            logger.info(`[${sessionId}] Login detected!`);
             break;
           }
 
@@ -987,23 +995,23 @@ async function runBrowserbaseLoginProcess(sessionId: string): Promise<void> {
             const finalUrl = page.url();
             if (!finalUrl.includes('accounts.kakao.com') && !finalUrl.includes('auth/login')) {
               loginDetected = true;
-              console.log(`[${sessionId}] Login detected (on Tistory page)!`);
+              logger.info(`[${sessionId}] Login detected (on Tistory page)!`);
               break;
             }
           }
         }
       } catch (e) {
-        console.log(`[${sessionId}] Page check error:`, e);
+        logger.info(`[${sessionId}] Page check error: ${e}`);
       }
     }
 
     if (loginDetected) {
       session.message = '쿠키 저장 중...';
-      console.log(`[${sessionId}] Saving cookies for user: ${session.userEmail}...`);
+      logger.info(`[${sessionId}] Saving cookies for user: ${session.userEmail}...`);
 
       if (session.userEmail) {
         const saved = await saveCookies(page, session.userEmail, session.ownerEmail);
-        console.log(`[${sessionId}] First cookie save result: ${saved}`);
+        logger.info(`[${sessionId}] First cookie save result: ${saved}`);
 
         // 블로그 페이지로 이동해서 추가 쿠키 획득
         try {
@@ -1013,14 +1021,14 @@ async function runBrowserbaseLoginProcess(sessionId: string): Promise<void> {
           });
           await delay(2000);
           const saved2 = await saveCookies(page, session.userEmail, session.ownerEmail);
-          console.log(`[${sessionId}] Second cookie save result: ${saved2}`);
+          logger.info(`[${sessionId}] Second cookie save result: ${saved2}`);
         } catch (e) {
-          console.log(`[${sessionId}] Blog page navigation skipped:`, e);
+          logger.info(`[${sessionId}] Blog page navigation skipped: ${e}`);
         }
 
         // 저장 확인
         const accounts = await getAllAccounts(session.ownerEmail);
-        console.log(`[${sessionId}] Accounts after save:`, accounts.map(a => a.userEmail));
+        logger.info(`[${sessionId}] Accounts after save: ${accounts.map(a => a.userEmail)}`);
 
         if (accounts.some(a => a.userEmail === session.userEmail)) {
           session.status = 'success';
@@ -1028,12 +1036,12 @@ async function runBrowserbaseLoginProcess(sessionId: string): Promise<void> {
         } else {
           session.status = 'failed';
           session.message = '쿠키 저장에 실패했습니다. 다시 시도해주세요.';
-          console.error(`[${sessionId}] Cookie save verification failed!`);
+          logger.error(`[${sessionId}] Cookie save verification failed!`);
         }
       } else {
         session.status = 'failed';
         session.message = '이메일 정보가 없어 쿠키를 저장할 수 없습니다.';
-        console.error(`[${sessionId}] No userEmail in session!`);
+        logger.error(`[${sessionId}] No userEmail in session!`);
       }
     } else {
       session.status = 'timeout';
@@ -1041,16 +1049,16 @@ async function runBrowserbaseLoginProcess(sessionId: string): Promise<void> {
     }
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-    console.error(`[${sessionId}] Login error:`, errorMessage);
+    logger.error(`[${sessionId}] Login error: ${errorMessage}`);
     session.status = 'failed';
     session.message = errorMessage;
   } finally {
     if (browser) {
-      console.log(`[${sessionId}] Disconnecting from Browserbase...`);
+      logger.info(`[${sessionId}] Disconnecting from Browserbase...`);
       try {
         browser.disconnect();
       } catch (e) {
-        console.error(`[${sessionId}] Error disconnecting browser:`, e);
+        logger.error(`[${sessionId}] Error disconnecting browser: ${e}`);
       }
     }
     session.browser = null;

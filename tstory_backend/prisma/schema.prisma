@@ -91,6 +91,23 @@ model BrowserbaseContext {
   @@unique([ownerEmail, userEmail])
 }
 
+// 프로세스 로그 (로그인/발행/쿠키갱신 과정 추적)
+model ProcessLog {
+  id        Int      @id @default(autoincrement())
+  sessionId String   @db.VarChar(100) // 작업 단위 그룹핑
+  source    String   @db.VarChar(50)  // auth, publish, cookie
+  level     String   @db.VarChar(10)  // info, warn, error
+  message   String   @db.Text
+  userEmail String?  @db.VarChar(255)
+  metadata  String?  @db.Text         // JSON 추가 데이터
+  createdAt DateTime @default(now())
+
+  @@index([sessionId])
+  @@index([source])
+  @@index([createdAt])
+  @@index([level])
+}
+
 // API 에러 로그
 model ErrorLog {
   id           Int      @id @default(autoincrement())

@@ -100,4 +100,112 @@ router.get('/errors/fallback', adminGuard, (req: Request, res: Response) => {
   res.json({ success: true, logs, count: logs.length });
 });
 
+/**
+ * 프로세스 로그 목록 (페이지네이션 + 필터)
+ * GET /api/admin/process-logs?email=...&page=1&limit=30&source=auth&level=error
+ */
+router.get('/process-logs', adminGuard, async (req: Request, res: Response) => {
+  try {
+    const page = Math.max(1, parseInt(req.query.page as string) || 1);
+    const limit = Math.min(100, Math.max(1, parseInt(req.query.limit as string) || 30));
+    const source = req.query.source as string | undefined;
+    const level = req.query.level as string | undefined;
+
+    const where: Record<string, unknown> = {};
+    if (source) where.source = source;
+    if (level) where.level = level;
+
+    const [logs, total] = await Promise.all([
+      prisma.processLog.findMany({
+        where,
+        orderBy: { createdAt: 'desc' },
+        skip: (page - 1) * limit,
+        take: limit,
+      }),
+      prisma.processLog.count({ where }),
+    ]);
+
+    res.json({
+      success: true,
+      logs,
+      pagination: { page, limit, total, totalPages: Math.ceil(total / limit) },
+    });
+  } catch (error) {
+    console.error('Get process logs failed:', error);
+    res.status(500).json({ success: false, error: '프로세스 로그 조회 실패' });
+  }
+});
+
+/**
+ * 세션별 프로세스 로그 그룹 (최근 세션 목록)
+ * GET /api/admin/process-logs/sessions?email=...&limit=20&source=auth
+ */
+router.get('/process-logs/sessions', adminGuard, async (req: Request, res: Response) => {
+  try {
+    const limit = Math.min(50, Math.max(1, parseInt(req.query.limit as string) || 20));
+    const source = req.query.source as string | undefined;
+
+    const whereClause = source ? `WHERE source = '${source}'` : '';
+
+    // 세션별 그룹: 최근 세션, 로그 수, 에러 수, 시작/종료 시간
+    const sessions = await prisma.$queryRawUnsafe<Array<{
+      sessionId: string;
+      source: string;
+      userEmail: string | null;
+      logCount: bigint;
+      errorCount: bigint;
+      startedAt: Date;
+      endedAt: Date;
+      lastMessage: string;
+    }>>(`
+      SELECT
+        sessionId,
+        MAX(source) as source,
+        MAX(userEmail) as userEmail,
+        COUNT(*) as logCount,
+        SUM(CASE WHEN level = 'error' THEN 1 ELSE 0 END) as errorCount,
+        MIN(createdAt) as startedAt,
+        MAX(createdAt) as endedAt,
+        (SELECT message FROM ProcessLog p2 WHERE p2.sessionId = ProcessLog.sessionId ORDER BY createdAt DESC LIMIT 1) as lastMessage
+      FROM ProcessLog
+      ${whereClause}
+      GROUP BY sessionId
+      ORDER BY MAX(createdAt) DESC
+      LIMIT ${limit}
+    `);
+
+    // bigint → number 변환
+    const serialized = sessions.map(s => ({
+      ...s,
+      logCount: Number(s.logCount),
+      errorCount: Number(s.errorCount),
+    }));
+
+    res.json({ success: true, sessions: serialized });
+  } catch (error) {
+    console.error('Get process log sessions failed:', error);
+    res.status(500).json({ success: false, error: '프로세스 로그 세션 조회 실패' });
+  }
+});
+
+/**
+ * 특정 세션의 전체 로그 (시간순)
+ * GET /api/admin/process-logs/session/:sessionId?email=...
+ */
+router.get('/process-logs/session/:sessionId', adminGuard, async (req: Request, res: Response) => {
+  try {
+    const { sessionId } = req.params;
+
+    const logs = await prisma.processLog.findMany({
+      where: { sessionId },
+      orderBy: { createdAt: 'asc' },
+    });
+
+    res.json({ success: true, logs, sessionId });
+  } catch (error) {
+    console.error('Get session logs failed:', error);
+    res.status(500).json({ success: false, error: '세션 로그 조회 실패' });
+  }
+});
+
 export default router;

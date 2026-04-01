@@ -3,67 +3,20 @@
 import { useAuth } from '@/contexts/AuthContext';
 import { useRouter } from 'next/navigation';
 import { useState, useEffect, useCallback } from 'react';
-import { ErrorLog, ErrorStats, Pagination } from '@/types/admin';
+import { ErrorLog, ErrorStats, Pagination, ProcessLog, ProcessLogSession } from '@/types/admin';
+
+type TabType = 'errors' | 'process';
 
 export default function AdminPage() {
   const { user, isAdmin, isLoading } = useAuth();
   const router = useRouter();
+  const [activeTab, setActiveTab] = useState<TabType>('errors');
 
-  const [stats, setStats] = useState<ErrorStats | null>(null);
-  const [errors, setErrors] = useState<ErrorLog[]>([]);
-  const [pagination, setPagination] = useState<Pagination>({ page: 1, limit: 20, total: 0, totalPages: 0 });
-  const [selectedError, setSelectedError] = useState<ErrorLog | null>(null);
-  const [statusFilter, setStatusFilter] = useState<string>('');
-  const [loading, setLoading] = useState(true);
-
-  // 비관리자 리다이렉트
   useEffect(() => {
     if (!isLoading && (!user || !isAdmin)) {
       router.push('/');
     }
   }, [user, isAdmin, isLoading, router]);
-
-  const fetchStats = useCallback(async () => {
-    if (!user) return;
-    try {
-      const res = await fetch(`/api/admin/errors/stats?email=${encodeURIComponent(user.email)}`);
-      const data = await res.json();
-      if (data.success) setStats(data.stats);
-    } catch (err) {
-      console.error('통계 조회 실패:', err);
-    }
-  }, [user]);
-
-  const fetchErrors = useCallback(async (page: number = 1) => {
-    if (!user) return;
-    setLoading(true);
-    try {
-      const params = new URLSearchParams({
-        email: user.email,
-        page: String(page),
-        limit: '20',
-      });
-      if (statusFilter) params.set('statusCode', statusFilter);
-
-      const res = await fetch(`/api/admin/errors?${params}`);
-      const data = await res.json();
-      if (data.success) {
-        setErrors(data.errors);
-        setPagination(data.pagination);
-      }
-    } catch (err) {
-      console.error('에러 로그 조회 실패:', err);
-    } finally {
-      setLoading(false);
-    }
-  }, [user, statusFilter]);
-
-  useEffect(() => {
-    if (user && isAdmin) {
-      fetchStats();
-      fetchErrors(1);
-    }
-  }, [user, isAdmin, fetchStats, fetchErrors]);
 
   if (isLoading) {
     return (
@@ -84,10 +37,83 @@ export default function AdminPage() {
     );
   }
 
-  const formatDate = (dateStr: string) => {
-    const d = new Date(dateStr);
-    return d.toLocaleString('ko-KR', { timeZone: 'Asia/Seoul' });
-  };
+  return (
+    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+      <h2 className="text-2xl font-bold text-slate-800 mb-6">관리자 대시보드</h2>
+
+      {/* 탭 */}
+      <div className="flex border-b border-slate-200 mb-6">
+        <button
+          onClick={() => setActiveTab('errors')}
+          className={`px-4 py-2.5 text-sm font-medium border-b-2 transition-colors ${
+            activeTab === 'errors'
+              ? 'border-orange-500 text-orange-600'
+              : 'border-transparent text-slate-500 hover:text-slate-700'
+          }`}
+        >
+          에러 로그
+        </button>
+        <button
+          onClick={() => setActiveTab('process')}
+          className={`px-4 py-2.5 text-sm font-medium border-b-2 transition-colors ${
+            activeTab === 'process'
+              ? 'border-orange-500 text-orange-600'
+              : 'border-transparent text-slate-500 hover:text-slate-700'
+          }`}
+        >
+          프로세스 로그
+        </button>
+      </div>
+
+      {activeTab === 'errors' && <ErrorLogTab email={user.email} />}
+      {activeTab === 'process' && <ProcessLogTab email={user.email} />}
+    </div>
+  );
+}
+
+// ==================== 에러 로그 탭 ====================
+function ErrorLogTab({ email }: { email: string }) {
+  const [stats, setStats] = useState<ErrorStats | null>(null);
+  const [errors, setErrors] = useState<ErrorLog[]>([]);
+  const [pagination, setPagination] = useState<Pagination>({ page: 1, limit: 20, total: 0, totalPages: 0 });
+  const [selectedError, setSelectedError] = useState<ErrorLog | null>(null);
+  const [statusFilter, setStatusFilter] = useState<string>('');
+  const [loading, setLoading] = useState(true);
+
+  const fetchStats = useCallback(async () => {
+    try {
+      const res = await fetch(`/api/admin/errors/stats?email=${encodeURIComponent(email)}`);
+      const data = await res.json();
+      if (data.success) setStats(data.stats);
+    } catch (err) {
+      console.error('통계 조회 실패:', err);
+    }
+  }, [email]);
+
+  const fetchErrors = useCallback(async (page: number = 1) => {
+    setLoading(true);
+    try {
+      const params = new URLSearchParams({ email, page: String(page), limit: '20' });
+      if (statusFilter) params.set('statusCode', statusFilter);
+      const res = await fetch(`/api/admin/errors?${params}`);
+      const data = await res.json();
+      if (data.success) {
+        setErrors(data.errors);
+        setPagination(data.pagination);
+      }
+    } catch (err) {
+      console.error('에러 로그 조회 실패:', err);
+    } finally {
+      setLoading(false);
+    }
+  }, [email, statusFilter]);
+
+  useEffect(() => {
+    fetchStats();
+    fetchErrors(1);
+  }, [fetchStats, fetchErrors]);
+
+  const formatDate = (dateStr: string) => new Date(dateStr).toLocaleString('ko-KR', { timeZone: 'Asia/Seoul' });
 
   const statusBadge = (code: number) => {
     if (code >= 500) return 'bg-red-100 text-red-700';
@@ -96,10 +122,7 @@ export default function AdminPage() {
   };
 
   return (
-    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-      <h2 className="text-2xl font-bold text-slate-800 mb-6">에러 로그 대시보드</h2>
-
-      {/* 통계 카드 */}
+    <>
       {stats && (
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
           <StatCard label="전체 에러" value={stats.total} color="slate" />
@@ -109,7 +132,6 @@ export default function AdminPage() {
         </div>
       )}
 
-      {/* 필터 */}
       <div className="flex items-center gap-4 mb-4">
         <select
           value={statusFilter}
@@ -131,7 +153,6 @@ export default function AdminPage() {
         </button>
       </div>
 
-      {/* 에러 목록 테이블 */}
       <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
@@ -146,13 +167,9 @@ export default function AdminPage() {
             </thead>
             <tbody>
               {loading ? (
-                <tr>
-                  <td colSpan={5} className="text-center py-8 text-slate-400">로딩 중...</td>
-                </tr>
+                <tr><td colSpan={5} className="text-center py-8 text-slate-400">로딩 중...</td></tr>
               ) : errors.length === 0 ? (
-                <tr>
-                  <td colSpan={5} className="text-center py-8 text-slate-400">에러 로그가 없습니다.</td>
-                </tr>
+                <tr><td colSpan={5} className="text-center py-8 text-slate-400">에러 로그가 없습니다.</td></tr>
               ) : (
                 errors.map((err) => (
                   <tr
@@ -163,8 +180,7 @@ export default function AdminPage() {
                     <td className="px-4 py-3 text-slate-500 whitespace-nowrap">{formatDate(err.createdAt)}</td>
                     <td className="px-4 py-3 text-slate-600">{err.userEmail || '-'}</td>
                     <td className="px-4 py-3 font-mono text-xs text-slate-700">
-                      <span className="text-slate-400 mr-1">{err.method}</span>
-                      {err.endpoint}
+                      <span className="text-slate-400 mr-1">{err.method}</span>{err.endpoint}
                     </td>
                     <td className="px-4 py-3">
                       <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${statusBadge(err.statusCode)}`}>
@@ -179,17 +195,11 @@ export default function AdminPage() {
           </table>
         </div>
 
-        {/* 선택된 에러 상세 */}
         {selectedError && (
           <div className="border-t border-slate-200 bg-slate-50 p-4">
             <div className="flex justify-between items-center mb-3">
               <h3 className="font-semibold text-slate-700">에러 상세 (#{selectedError.id})</h3>
-              <button
-                onClick={() => setSelectedError(null)}
-                className="text-slate-400 hover:text-slate-600 text-sm"
-              >
-                닫기
-              </button>
+              <button onClick={() => setSelectedError(null)} className="text-slate-400 hover:text-slate-600 text-sm">닫기</button>
             </div>
             <div className="space-y-3">
               <div>
@@ -217,32 +227,185 @@ export default function AdminPage() {
         )}
       </div>
 
-      {/* 페이지네이션 */}
       {pagination.totalPages > 1 && (
-        <div className="flex items-center justify-center gap-2 mt-6">
-          <button
-            onClick={() => fetchErrors(pagination.page - 1)}
-            disabled={pagination.page <= 1}
-            className="px-3 py-1.5 text-sm bg-white border border-slate-300 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed hover:bg-slate-50 transition-colors"
-          >
-            이전
-          </button>
-          <span className="text-sm text-slate-600">
-            {pagination.page} / {pagination.totalPages} 페이지 (총 {pagination.total}건)
-          </span>
-          <button
-            onClick={() => fetchErrors(pagination.page + 1)}
-            disabled={pagination.page >= pagination.totalPages}
-            className="px-3 py-1.5 text-sm bg-white border border-slate-300 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed hover:bg-slate-50 transition-colors"
-          >
-            다음
-          </button>
-        </div>
+        <PaginationControls pagination={pagination} onPageChange={fetchErrors} />
       )}
-    </div>
+    </>
   );
 }
 
+// ==================== 프로세스 로그 탭 ====================
+function ProcessLogTab({ email }: { email: string }) {
+  const [sessions, setSessions] = useState<ProcessLogSession[]>([]);
+  const [selectedSessionId, setSelectedSessionId] = useState<string | null>(null);
+  const [sessionLogs, setSessionLogs] = useState<ProcessLog[]>([]);
+  const [sourceFilter, setSourceFilter] = useState<string>('');
+  const [loading, setLoading] = useState(true);
+  const [logsLoading, setLogsLoading] = useState(false);
+
+  const fetchSessions = useCallback(async () => {
+    setLoading(true);
+    try {
+      const params = new URLSearchParams({ email, limit: '30' });
+      if (sourceFilter) params.set('source', sourceFilter);
+      const res = await fetch(`/api/admin/process-logs/sessions?${params}`);
+      const data = await res.json();
+      if (data.success) setSessions(data.sessions);
+    } catch (err) {
+      console.error('세션 조회 실패:', err);
+    } finally {
+      setLoading(false);
+    }
+  }, [email, sourceFilter]);
+
+  const fetchSessionLogs = useCallback(async (sessionId: string) => {
+    setLogsLoading(true);
+    try {
+      const res = await fetch(`/api/admin/process-logs/session/${sessionId}?email=${encodeURIComponent(email)}`);
+      const data = await res.json();
+      if (data.success) {
+        setSessionLogs(data.logs);
+        setSelectedSessionId(sessionId);
+      }
+    } catch (err) {
+      console.error('세션 로그 조회 실패:', err);
+    } finally {
+      setLogsLoading(false);
+    }
+  }, [email]);
+
+  useEffect(() => {
+    fetchSessions();
+  }, [fetchSessions]);
+
+  const formatDate = (dateStr: string) => new Date(dateStr).toLocaleString('ko-KR', { timeZone: 'Asia/Seoul' });
+
+  const sourceLabel: Record<string, { text: string; color: string }> = {
+    auth: { text: '로그인', color: 'bg-blue-100 text-blue-700' },
+    publish: { text: '발행', color: 'bg-green-100 text-green-700' },
+    cookie: { text: '쿠키', color: 'bg-purple-100 text-purple-700' },
+  };
+
+  const levelColor: Record<string, string> = {
+    info: 'text-slate-600',
+    warn: 'text-amber-600',
+    error: 'text-red-600 font-medium',
+  };
+
+  return (
+    <>
+      {/* 필터 */}
+      <div className="flex items-center gap-4 mb-4">
+        <select
+          value={sourceFilter}
+          onChange={(e) => { setSourceFilter(e.target.value); setSelectedSessionId(null); }}
+          className="px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-orange-300"
+        >
+          <option value="">전체 소스</option>
+          <option value="auth">로그인</option>
+          <option value="publish">발행</option>
+          <option value="cookie">쿠키 갱신</option>
+        </select>
+        <button
+          onClick={() => { fetchSessions(); setSelectedSessionId(null); }}
+          className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-lg text-sm transition-colors"
+        >
+          새로고침
+        </button>
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+        {/* 세션 목록 (왼쪽) */}
+        <div className="lg:col-span-1">
+          <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+            <div className="px-4 py-3 bg-slate-50 border-b border-slate-200">
+              <h3 className="font-medium text-slate-700 text-sm">최근 세션</h3>
+            </div>
+            <div className="divide-y divide-slate-100 max-h-[600px] overflow-y-auto">
+              {loading ? (
+                <div className="text-center py-8 text-slate-400 text-sm">로딩 중...</div>
+              ) : sessions.length === 0 ? (
+                <div className="text-center py-8 text-slate-400 text-sm">프로세스 로그가 없습니다.</div>
+              ) : (
+                sessions.map((s) => {
+                  const src = sourceLabel[s.source] || { text: s.source, color: 'bg-slate-100 text-slate-700' };
+                  return (
+                    <button
+                      key={s.sessionId}
+                      onClick={() => fetchSessionLogs(s.sessionId)}
+                      className={`w-full text-left px-4 py-3 hover:bg-slate-50 transition-colors ${
+                        selectedSessionId === s.sessionId ? 'bg-orange-50 border-l-2 border-orange-400' : ''
+                      }`}
+                    >
+                      <div className="flex items-center gap-2 mb-1">
+                        <span className={`px-1.5 py-0.5 rounded text-xs font-medium ${src.color}`}>{src.text}</span>
+                        {s.errorCount > 0 && (
+                          <span className="px-1.5 py-0.5 rounded text-xs font-medium bg-red-100 text-red-700">
+                            {s.errorCount}
+                          </span>
+                        )}
+                        <span className="text-xs text-slate-400 ml-auto">{s.logCount}건</span>
+                      </div>
+                      <p className="text-xs text-slate-500 truncate">{s.userEmail || '-'}</p>
+                      <p className="text-xs text-slate-400 mt-0.5">{formatDate(s.startedAt)}</p>
+                      <p className="text-xs text-slate-400 truncate mt-0.5">{s.lastMessage}</p>
+                    </button>
+                  );
+                })
+              )}
+            </div>
+          </div>
+        </div>
+
+        {/* 세션 상세 로그 (오른쪽) */}
+        <div className="lg:col-span-2">
+          <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+            <div className="px-4 py-3 bg-slate-50 border-b border-slate-200 flex items-center justify-between">
+              <h3 className="font-medium text-slate-700 text-sm">
+                {selectedSessionId ? `세션 로그 (${sessionLogs.length}건)` : '세션을 선택하세요'}
+              </h3>
+              {selectedSessionId && (
+                <span className="text-xs text-slate-400 font-mono">{selectedSessionId}</span>
+              )}
+            </div>
+            <div className="max-h-[600px] overflow-y-auto">
+              {!selectedSessionId ? (
+                <div className="text-center py-16 text-slate-400 text-sm">
+                  왼쪽 세션 목록에서 세션을 클릭하면 상세 로그가 표시됩니다.
+                </div>
+              ) : logsLoading ? (
+                <div className="text-center py-8 text-slate-400 text-sm">로딩 중...</div>
+              ) : (
+                <div className="divide-y divide-slate-50">
+                  {sessionLogs.map((log) => (
+                    <div key={log.id} className="px-4 py-2 hover:bg-slate-50">
+                      <div className="flex items-start gap-2">
+                        <span className="text-xs text-slate-400 whitespace-nowrap mt-0.5 min-w-[60px]">
+                          {new Date(log.createdAt).toLocaleTimeString('ko-KR', { timeZone: 'Asia/Seoul' })}
+                        </span>
+                        <LevelBadge level={log.level} />
+                        <p className={`text-sm break-all ${levelColor[log.level] || 'text-slate-600'}`}>
+                          {log.message}
+                        </p>
+                      </div>
+                      {log.metadata && (
+                        <pre className="text-xs text-slate-400 mt-1 ml-[76px] bg-slate-50 p-1 rounded overflow-x-auto">
+                          {JSON.stringify(JSON.parse(log.metadata), null, 2)}
+                        </pre>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      </div>
+    </>
+  );
+}
+
+// ==================== 공통 컴포넌트 ====================
 function StatCard({ label, value, color }: { label: string; value: number; color: string }) {
   const colorMap: Record<string, string> = {
     slate: 'bg-slate-50 border-slate-200 text-slate-800',
@@ -255,6 +418,44 @@ function StatCard({ label, value, color }: { label: string; value: number; color
     <div className={`rounded-xl border p-4 ${colorMap[color]}`}>
       <p className="text-sm opacity-70 mb-1">{label}</p>
       <p className="text-2xl font-bold">{value.toLocaleString()}</p>
+    </div>
+  );
+}
+
+function LevelBadge({ level }: { level: string }) {
+  const styles: Record<string, string> = {
+    info: 'bg-slate-100 text-slate-500',
+    warn: 'bg-amber-100 text-amber-600',
+    error: 'bg-red-100 text-red-600',
+  };
+
+  return (
+    <span className={`px-1.5 py-0.5 rounded text-[10px] font-mono font-medium min-w-[36px] text-center ${styles[level] || styles.info}`}>
+      {level.toUpperCase()}
+    </span>
+  );
+}
+
+function PaginationControls({ pagination, onPageChange }: { pagination: Pagination; onPageChange: (page: number) => void }) {
+  return (
+    <div className="flex items-center justify-center gap-2 mt-6">
+      <button
+        onClick={() => onPageChange(pagination.page - 1)}
+        disabled={pagination.page <= 1}
+        className="px-3 py-1.5 text-sm bg-white border border-slate-300 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed hover:bg-slate-50 transition-colors"
+      >
+        이전
+      </button>
+      <span className="text-sm text-slate-600">
+        {pagination.page} / {pagination.totalPages} 페이지 (총 {pagination.total}건)
+      </span>
+      <button
+        onClick={() => onPageChange(pagination.page + 1)}
+        disabled={pagination.page >= pagination.totalPages}
+        className="px-3 py-1.5 text-sm bg-white border border-slate-300 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed hover:bg-slate-50 transition-colors"
+      >
+        다음
+      </button>
     </div>
   );
 }
