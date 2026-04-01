@@ -332,9 +332,15 @@ export async function loginToTistory(page: Page, credentials?: { email: string; 
 
           const checkUrl = page.url();
 
-          // 티스토리로 리다이렉트 완료 (OAuth 콜백 /auth/login?code= 제외)
-          if (checkUrl.includes('tistory.com') && !checkUrl.includes('/auth/login')) {
-            // URL만으로 부족 — 실제 로그인 상태 재검증
+          // 티스토리로 리다이렉트 완료 (OAuth 콜백 포함)
+          if (checkUrl.includes('tistory.com') && !checkUrl.includes('/auth/login?redirect')) {
+            // OAuth 콜백/리다이렉트가 완료될 때까지 충분히 대기
+            logger.info(`2FA 후 tistory.com 감지: ${checkUrl}`);
+            await delay(5000);
+            await page.waitForNavigation({ waitUntil: 'networkidle2', timeout: 15000 }).catch(() => {});
+            logger.info(`대기 후 URL: ${page.url()}`);
+
+            // 로그인 상태 재검증
             const verified = await isLoggedIn(page, undefined, logger);
             if (verified) {
               logger.info('2FA completed successfully! (verified)');

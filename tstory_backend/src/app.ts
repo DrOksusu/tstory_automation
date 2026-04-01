@@ -31,7 +31,9 @@ app.use(cors({
     // origin이 없는 경우 (서버 간 요청, Postman 등) 허용
     if (!origin) return callback(null, true);
 
-    if (allowedOrigins.includes(origin)) {
+    // Vercel 프리뷰 URL 패턴도 허용
+    const isAllowed = allowedOrigins.includes(origin) || origin.endsWith('.vercel.app');
+    if (isAllowed) {
       callback(null, true);
     } else {
       console.log(`CORS blocked origin: ${origin}`);
