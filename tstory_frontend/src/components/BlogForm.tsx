@@ -1,7 +1,13 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import type { RecentPost } from '../hooks/useBlogPublish';
+
+interface PromptTemplate {
+  id: number;
+  name: string;
+  content: string;
+}
 
 // 디폴트 시스템 프롬프트 (백엔드 geminiService.ts와 동일)
 const DEFAULT_SYSTEM_PROMPT = `너는 상위 노출 1%를 만드는 검색엔진 최적화(SEO) 전문가이자 콘텐츠 에디터야. 아래 참고 내용을 바탕으로 검색엔진 최적화된 블로그 글을 HTML 형식으로 작성해줘.
@@ -49,6 +55,75 @@ export default function BlogForm({
 }: BlogFormProps) {
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [isCustomBlog, setIsCustomBlog] = useState(false);
+  const [promptTemplates, setPromptTemplates] = useState<PromptTemplate[]>([]);
+  const [selectedPromptId, setSelectedPromptId] = useState<string>('default');
+  const [savingPrompt, setSavingPrompt] = useState(false);
+  const [showSaveInput, setShowSaveInput] = useState(false);
+  const [newPromptName, setNewPromptName] = useState('');
+
+  const fetchPrompts = useCallback(async () => {
+    try {
+      const res = await fetch('/api/blog/prompts');
+      const data = await res.json();
+      if (data.success) setPromptTemplates(data.prompts);
+    } catch (err) {
+      console.error('프롬프트 목록 조회 실패:', err);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchPrompts();
+  }, [fetchPrompts]);
+
+  const handlePromptSelect = (value: string) => {
+    setSelectedPromptId(value);
+    if (value === 'default') {
+      setFormData({ ...formData, systemPrompt: '' });
+    } else {
+      const template = promptTemplates.find(t => t.id === Number(value));
+      if (template) {
+        setFormData({ ...formData, systemPrompt: template.content });
+      }
+    }
+  };
+
+  const handleSavePrompt = async () => {
+    if (!newPromptName.trim()) return;
+    const content = formData.systemPrompt || DEFAULT_SYSTEM_PROMPT;
+    setSavingPrompt(true);
+    try {
+      const res = await fetch('/api/blog/prompts', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: newPromptName.trim(), content }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        await fetchPrompts();
+        setSelectedPromptId(String(data.prompt.id));
+        setNewPromptName('');
+        setShowSaveInput(false);
+      }
+    } catch (err) {
+      console.error('프롬프트 저장 실패:', err);
+    } finally {
+      setSavingPrompt(false);
+    }
+  };
+
+  const handleDeletePrompt = async () => {
+    if (selectedPromptId === 'default') return;
+    const template = promptTemplates.find(t => t.id === Number(selectedPromptId));
+    if (!template || !confirm(`"${template.name}" 프롬프트를 삭제하시겠습니까?`)) return;
+    try {
+      await fetch(`/api/blog/prompts/${selectedPromptId}`, { method: 'DELETE' });
+      setSelectedPromptId('default');
+      setFormData({ ...formData, systemPrompt: '' });
+      await fetchPrompts();
+    } catch (err) {
+      console.error('프롬프트 삭제 실패:', err);
+    }
+  };
 
   // 최근 5개 블로그 (중복 제거)
   const recentBlogNames = blogNames.slice(0, 5);
@@ -302,30 +377,98 @@ export default function BlogForm({
           {showAdvanced && (
             <div className="p-4 space-y-3">
               <p className="text-xs text-slate-500">
-                AI에게 전달할 프롬프트를 수정할 수 있습니다. 비워두면 기본 프롬프트가 사용됩니다.
-                <br />
-                <code className="text-orange-600">{'{mainKeyword}'}</code>, <code className="text-orange-600">{'{regionKeyword}'}</code> 플레이스홀더는 실제 키워드로 자동 치환됩니다.
+                AI에게 전달할 프롬프트를 선택하거나 수정할 수 있습니다.
+                <code className="text-orange-600 ml-1">{'{mainKeyword}'}</code>, <code className="text-orange-600">{'{regionKeyword}'}</code> 플레이스홀더는 실제 키워드로 자동 치환됩니다.
               </p>
+
+              {/* 프롬프트 드롭다운 */}
+              <div className="flex items-center gap-2">
+                <select
+                  value={selectedPromptId}
+                  onChange={(e) => handlePromptSelect(e.target.value)}
+                  disabled={loading}
+                  className="flex-1 px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-orange-500 focus:border-orange-500 outline-none bg-white"
+                >
+                  <option value="default">기본 프롬프트</option>
+                  {promptTemplates.map((t) => (
+                    <option key={t.id} value={t.id}>{t.name}</option>
+                  ))}
+                </select>
+                {selectedPromptId !== 'default' && (
+                  <button
+                    type="button"
+                    onClick={handleDeletePrompt}
+                    className="px-2 py-2 text-red-400 hover:text-red-600 transition-colors"
+                    title="선택된 프롬프트 삭제"
+                  >
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                    </svg>
+                  </button>
+                )}
+              </div>
+
               <textarea
                 name="systemPrompt"
                 value={formData.systemPrompt || DEFAULT_SYSTEM_PROMPT}
                 onChange={(e) => {
                   const value = e.target.value === DEFAULT_SYSTEM_PROMPT ? '' : e.target.value;
                   setFormData({ ...formData, systemPrompt: value });
+                  setSelectedPromptId('default');
                 }}
                 rows={10}
                 className="w-full px-4 py-3 border border-slate-300 rounded-xl focus:ring-2 focus:ring-orange-500 focus:border-orange-500 transition-all outline-none resize-y text-sm font-mono leading-relaxed"
                 disabled={loading}
               />
-              {formData.systemPrompt && (
-                <button
-                  type="button"
-                  onClick={() => setFormData({ ...formData, systemPrompt: '' })}
-                  className="text-xs text-orange-500 hover:text-orange-700 font-medium"
-                >
-                  기본 프롬프트로 초기화
-                </button>
-              )}
+
+              {/* 저장/초기화 버튼 */}
+              <div className="flex items-center gap-2 flex-wrap">
+                {formData.systemPrompt && (
+                  <button
+                    type="button"
+                    onClick={() => { setFormData({ ...formData, systemPrompt: '' }); setSelectedPromptId('default'); }}
+                    className="text-xs text-orange-500 hover:text-orange-700 font-medium"
+                  >
+                    기본 프롬프트로 초기화
+                  </button>
+                )}
+                {showSaveInput ? (
+                  <div className="flex items-center gap-2 ml-auto">
+                    <input
+                      type="text"
+                      value={newPromptName}
+                      onChange={(e) => setNewPromptName(e.target.value)}
+                      placeholder="프롬프트 이름"
+                      className="px-2 py-1 border border-slate-300 rounded text-xs w-36 focus:ring-1 focus:ring-orange-500 outline-none"
+                      onKeyDown={(e) => e.key === 'Enter' && handleSavePrompt()}
+                      autoFocus
+                    />
+                    <button
+                      type="button"
+                      onClick={handleSavePrompt}
+                      disabled={savingPrompt || !newPromptName.trim()}
+                      className="text-xs bg-orange-500 text-white px-2 py-1 rounded hover:bg-orange-600 disabled:opacity-50"
+                    >
+                      {savingPrompt ? '저장 중...' : '저장'}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => { setShowSaveInput(false); setNewPromptName(''); }}
+                      className="text-xs text-slate-400 hover:text-slate-600"
+                    >
+                      취소
+                    </button>
+                  </div>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => setShowSaveInput(true)}
+                    className="text-xs text-blue-500 hover:text-blue-700 font-medium ml-auto"
+                  >
+                    현재 프롬프트 저장
+                  </button>
+                )}
+              </div>
             </div>
           )}
         </div>
