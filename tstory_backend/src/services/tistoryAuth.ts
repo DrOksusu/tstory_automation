@@ -26,37 +26,63 @@ function generateSessionId(): string {
 export async function isLoggedIn(page: Page, blogName?: string, logger?: ProcessLogger): Promise<boolean> {
   const log = logger || createLogger('auth');
   try {
-    // 블로그 이름이 지정되면 해당 블로그 관리 페이지로 확인
-    // 지정되지 않으면 티스토리 공통 관리 페이지로 확인 (계정 무관)
-    const checkUrl = blogName
-      ? `https://${blogName}.tistory.com/manage/newpost`
-      : 'https://www.tistory.com/manage';
-    log.info(`isLoggedIn check - navigating to: ${checkUrl}`);
+    if (blogName) {
+      // 특정 블로그 관리 페이지로 접근 가능한지 확인
+      const writeUrl = `https://${blogName}.tistory.com/manage/newpost`;
+      log.info(`isLoggedIn check - navigating to: ${writeUrl}`);
+      await page.goto(writeUrl, { waitUntil: 'networkidle2', timeout: 20000 });
 
-    await page.goto(checkUrl, {
-      waitUntil: 'networkidle2',
-      timeout: 20000,
-    });
+      const url = page.url();
+      log.info(`isLoggedIn check - Current URL: ${url}`);
+
+      if (url.includes('/auth/login') || url.includes('accounts.kakao.com')) {
+        log.info('Not logged in - redirected to login page');
+        return false;
+      }
+      if (url.includes('/manage') || url.includes('newpost') || url.includes('/write')) {
+        log.info('Logged in successfully - on manage/write page');
+        return true;
+      }
+      log.info('Login status unclear, assuming not logged in');
+      return false;
+    }
+
+    // blogName 미지정: 티스토리 메인 페이지에서 로그인 상태 확인 (계정 무관)
+    log.info('isLoggedIn check - navigating to: https://www.tistory.com/');
+    await page.goto('https://www.tistory.com/', { waitUntil: 'networkidle2', timeout: 20000 });
 
     const url = page.url();
     log.info(`isLoggedIn check - Current URL: ${url}`);
 
     // 로그인 페이지로 리디렉션되면 로그인 안됨
-    const isLoginPage = url.includes('/auth/login') || url.includes('accounts.kakao.com');
-    if (isLoginPage) {
+    if (url.includes('/auth/login') || url.includes('accounts.kakao.com')) {
       log.info('Not logged in - redirected to login page');
       return false;
     }
 
-    // 관리 페이지에 있으면 로그인됨
-    if (url.includes('/manage') || url.includes('newpost') || url.includes('/write')) {
-      log.info('Logged in successfully - on manage/write page');
+    // 페이지 내에서 로그인 관련 요소 확인
+    const hasLoginIndicator = await page.evaluate(() => {
+      // 로그인된 경우: 프로필/마이페이지 링크가 존재
+      const profileLink = document.querySelector('a[href*="/manage"], a[href*="my.tistory.com"], .btn_mypage, .wrap_profile, .area_user');
+      // 로그인 안 된 경우: 로그인 버튼이 존재
+      const loginBtn = document.querySelector('a[href*="/auth/login"], .btn_login, a.link_login');
+      return { hasProfile: !!profileLink, hasLoginBtn: !!loginBtn };
+    });
+
+    log.info(`isLoggedIn DOM check - hasProfile: ${hasLoginIndicator.hasProfile}, hasLoginBtn: ${hasLoginIndicator.hasLoginBtn}`);
+
+    if (hasLoginIndicator.hasProfile) {
+      log.info('Logged in - profile/manage link found');
       return true;
     }
+    if (hasLoginIndicator.hasLoginBtn) {
+      log.info('Not logged in - login button found');
+      return false;
+    }
 
-    // 티스토리 메인이나 블로그 페이지에 있으면 로그인됨
+    // DOM으로 판단 불가 시 URL 기반 판단
     if (url.includes('tistory.com') && !url.includes('login') && !url.includes('auth')) {
-      log.info('Logged in - on tistory page');
+      log.info('Possibly logged in - on tistory page without login redirect');
       return true;
     }
 
