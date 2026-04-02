@@ -765,7 +765,11 @@ async function runPreviewTask(
  */
 export async function getPosts(req: Request, res: Response): Promise<void> {
   try {
+    const userEmail = req.query.userEmail as string | undefined;
+    const where = userEmail ? { userEmail } : {};
+
     const posts = await prisma.blogPost.findMany({
+      where,
       orderBy: { createdAt: 'desc' },
       take: 50,
     });

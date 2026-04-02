@@ -36,11 +36,12 @@ export function useBlogPublish(selectedAccount: string | null) {
     blogName: '',
   });
 
-  // 마운트 시 최근 글 목록 + 블로그 이름 목록 로드
+  // 계정 변경 시 최근 글 목록 재조회
   useEffect(() => {
     const fetchRecentPosts = async () => {
       try {
-        const response = await fetch(`${API_BASE}/api/blog/posts`);
+        const params = selectedAccount ? `?userEmail=${encodeURIComponent(selectedAccount)}` : '';
+        const response = await fetch(`${API_BASE}/api/blog/posts${params}`);
         const data = await response.json();
         if (data.success && Array.isArray(data.posts)) {
           const recent: RecentPost[] = data.posts.slice(0, 10).map((p: RecentPost & { blogName?: string }) => ({
@@ -57,9 +58,17 @@ export function useBlogPublish(selectedAccount: string | null) {
             const latest = recent[0];
             setFormData((prev) => ({
               ...prev,
-              mainKeyword: latest.mainKeyword,
-              regionKeyword: latest.regionKeyword,
-              blogName: latest.blogName || prev.blogName,
+              sourceUrl: latest.sourceUrl || prev.sourceUrl,
+              mainKeyword: latest.mainKeyword || prev.mainKeyword,
+              regionKeyword: latest.regionKeyword || prev.regionKeyword,
+            }));
+          } else {
+            // 해당 계정의 기록이 없으면 폼 초기화
+            setFormData((prev) => ({
+              ...prev,
+              sourceUrl: '',
+              mainKeyword: '',
+              regionKeyword: '',
             }));
           }
         }
@@ -69,7 +78,7 @@ export function useBlogPublish(selectedAccount: string | null) {
     };
 
     fetchRecentPosts();
-  }, []);
+  }, [selectedAccount]);
 
   // 계정 변경 시 블로그 이름 목록 재조회
   useEffect(() => {
