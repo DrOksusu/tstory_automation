@@ -324,9 +324,9 @@ export async function loginToTistory(page: Page, credentials?: { email: string; 
       const afterContinueUrl = page.url();
       if (afterContinueUrl.includes('kauth.kakao.com') || afterContinueUrl.includes('accounts.kakao.com')) {
         logger.info('Still on Kakao page after continue button - 2FA may be required');
-        logger.info('Waiting up to 120 seconds for user to complete 2FA...');
+        logger.info('Waiting up to 60 seconds for user to complete 2FA...');
 
-        for (let remaining = 120; remaining > 0; remaining -= 2) {
+        for (let remaining = 60; remaining > 0; remaining -= 2) {
           onProgress?.(`2FA_REQUIRED|${remaining}`);
           await delay(2000);
 
@@ -384,7 +384,7 @@ export async function loginToTistory(page: Page, credentials?: { email: string; 
           }
         }
 
-        logger.info('2FA wait timeout (120s)');
+        logger.info('2FA wait timeout (60s)');
         await page.screenshot({ path: 'tistory-2fa-timeout.png', fullPage: true });
         return false;
       }
