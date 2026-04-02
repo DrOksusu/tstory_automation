@@ -26,12 +26,14 @@ function generateSessionId(): string {
 export async function isLoggedIn(page: Page, blogName?: string, logger?: ProcessLogger): Promise<boolean> {
   const log = logger || createLogger('auth');
   try {
-    const targetBlog = blogName || config.tistory.blogName;
-    // 글쓰기 페이지로 직접 이동 시도 (더 정확한 체크)
-    const writeUrl = `https://${targetBlog}.tistory.com/manage/newpost`;
-    log.info(`isLoggedIn check - navigating to: ${writeUrl}`);
+    // 블로그 이름이 지정되면 해당 블로그 관리 페이지로 확인
+    // 지정되지 않으면 티스토리 공통 관리 페이지로 확인 (계정 무관)
+    const checkUrl = blogName
+      ? `https://${blogName}.tistory.com/manage/newpost`
+      : 'https://www.tistory.com/manage';
+    log.info(`isLoggedIn check - navigating to: ${checkUrl}`);
 
-    await page.goto(writeUrl, {
+    await page.goto(checkUrl, {
       waitUntil: 'networkidle2',
       timeout: 20000,
     });
@@ -40,26 +42,22 @@ export async function isLoggedIn(page: Page, blogName?: string, logger?: Process
     log.info(`isLoggedIn check - Current URL: ${url}`);
 
     // 로그인 페이지로 리디렉션되면 로그인 안됨
-    const isLoginPage = url.includes('login') || url.includes('auth') || url.includes('kakao');
+    const isLoginPage = url.includes('/auth/login') || url.includes('accounts.kakao.com');
     if (isLoginPage) {
       log.info('Not logged in - redirected to login page');
       return false;
     }
 
-    // 글쓰기 페이지나 관리 페이지에 있으면 로그인됨
-    const isWritePage = url.includes('newpost') || url.includes('manage/post') || url.includes('/write');
-    const isManagePage = url.includes('/manage');
-
-    if (isWritePage || isManagePage) {
+    // 관리 페이지에 있으면 로그인됨
+    if (url.includes('/manage') || url.includes('newpost') || url.includes('/write')) {
       log.info('Logged in successfully - on manage/write page');
       return true;
     }
 
-    // 블로그 홈으로 리다이렉트되면 쿠키는 있지만 세션이 만료됨
-    if (url === `https://${targetBlog}.tistory.com/` ||
-        url === `https://${targetBlog}.tistory.com`) {
-      log.info('Cookie exists but session expired - redirected to blog home');
-      return false;
+    // 티스토리 메인이나 블로그 페이지에 있으면 로그인됨
+    if (url.includes('tistory.com') && !url.includes('login') && !url.includes('auth')) {
+      log.info('Logged in - on tistory page');
+      return true;
     }
 
     log.info('Login status unclear, assuming not logged in');
