@@ -70,6 +70,7 @@ jobs:
 
             # 새 컨테이너 실행
             docker run -d \
+              --init \
               --name tstory-backend \
               --restart unless-stopped \
               -p 3010:3010 \
